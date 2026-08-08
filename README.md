@@ -2,6 +2,8 @@
 
 Site de agendamento dos kits de Chromebook da **Escola Agrícola Municipal Carlos Heins Funke** (Joinville/SC).
 
+🔗 **Site em produção:** https://agenda-chromebooks.vercel.app (acesso restrito por login — só para funcionários da escola)
+
 Substitui o controle manual por planilha: professores agendam os kits pelo site, e toda sexta-feira ao meio-dia um resumo da semana seguinte é enviado automaticamente por e-mail — sem nenhum passo manual.
 
 ## Stack
