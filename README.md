@@ -85,3 +85,7 @@ As variáveis `VITE_FIREBASE_*` precisam estar configuradas no painel do Vercel 
 ## Segurança
 
 `gestores` e `bloqueios` exigem login validado no servidor (claim `gestor` no Firebase Auth). `professores` (ler/criar) e `reservas` (criar/cancelar) ficam abertos de propósito, para não travar o uso diário — ver `firestore.rules` para os detalhes e trade-offs.
+
+## Licença
+
+Código disponibilizado apenas para consulta. Todos os direitos reservados — veja [LICENSE](LICENSE).
