@@ -11,7 +11,7 @@ import {
   criarGestor,
 } from '../lib/firestore-api';
 import { auth } from '../lib/firebase';
-import { autenticarGestor, sairGestor } from '../lib/gestor-auth';
+import { autenticarGestor } from '../lib/auth';
 import ConfirmInline from '../components/ConfirmInline';
 
 export default function Gestor() {
@@ -78,12 +78,7 @@ export default function Gestor() {
 
   return (
     <section className="screen">
-      <div className="screen-header">
-        <h2>Área do gestor</h2>
-        <button type="button" className="btn btn-ghost" onClick={sairGestor}>
-          Sair
-        </button>
-      </div>
+      <h2>Área do gestor</h2>
       <GerenciarReservas />
       <BloquearPeriodo />
       <Gestores />

@@ -34,6 +34,10 @@ const EMAIL_PASS = defineSecret('EMAIL_PASS');
 // `firebase functions:secrets:set GESTOR_CODE`.
 const GESTOR_CODE = defineSecret('GESTOR_CODE');
 
+// Código de acesso geral ao site (professores/funcionários da escola em
+// geral). Configurar com `firebase functions:secrets:set ACESSO_CODE`.
+const ACESSO_CODE = defineSecret('ACESSO_CODE');
+
 // ID da Google Sheet que recebe a agenda da semana (a parte entre /d/ e /edit
 // na URL da planilha). Crie uma planilha, compartilhe com o e-mail da conta
 // de serviço das Cloud Functions (Editor) e cole o ID aqui — o `firebase
@@ -93,17 +97,32 @@ exports.testarEnvioAgora = onRequest(
 );
 
 /**
+ * Valida o código geral de acesso ao site e, se correto, devolve um custom
+ * token do Firebase Auth com a claim `acesso: true`. Sem essa claim, as
+ * firestore.rules bloqueiam qualquer leitura/escrita — é o portão de entrada
+ * do site inteiro, restrito ao pessoal da escola.
+ */
+exports.autenticarAcesso = onCall({ secrets: [ACESSO_CODE], region: 'southamerica-east1' }, async (request) => {
+  const codigo = request.data && request.data.codigo;
+  if (!codigo || codigo !== ACESSO_CODE.value()) {
+    throw new HttpsError('permission-denied', 'Código incorreto.');
+  }
+  const token = await getAuth().createCustomToken('acesso', { acesso: true });
+  return { token };
+});
+
+/**
  * Valida o código da área do gestor e, se correto, devolve um custom token
- * do Firebase Auth com a claim `gestor: true`. O frontend usa esse token
- * pra logar (signInWithCustomToken) e as firestore.rules exigem essa claim
- * pra escrever em `gestores` e `bloqueios`.
+ * com as claims `acesso: true` e `gestor: true` — a claim `acesso` também
+ * vai junto pra logar como gestor não derrubar o acesso geral ao site (o
+ * Firebase Auth só mantém uma sessão por vez no navegador).
  */
 exports.autenticarGestor = onCall({ secrets: [GESTOR_CODE], region: 'southamerica-east1' }, async (request) => {
   const codigo = request.data && request.data.codigo;
   if (!codigo || codigo !== GESTOR_CODE.value()) {
     throw new HttpsError('permission-denied', 'Código incorreto.');
   }
-  const token = await getAuth().createCustomToken('gestor', { gestor: true });
+  const token = await getAuth().createCustomToken('gestor', { acesso: true, gestor: true });
   return { token };
 });
 

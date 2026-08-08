@@ -41,6 +41,10 @@ body {
 
 .app-header {
   padding: 24px 0 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .app-header h1 {
@@ -84,17 +88,6 @@ body {
 }
 
 .screen h2 {
-  margin: 0 0 16px;
-}
-
-.screen-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.screen-header h2 {
   margin: 0 0 16px;
 }
 
