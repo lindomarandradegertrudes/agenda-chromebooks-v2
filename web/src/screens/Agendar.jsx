@@ -21,16 +21,24 @@ import ConfirmInline from '../components/ConfirmInline';
 
 const KIT_IDS = Object.keys(KITS);
 
+// Só é possível agendar para UMA semana por vez — a próxima — e só até a
+// sexta-feira que a antecede. Depois que essa sexta passa (ou seja, a
+// partir do sábado), a semana que viria a seguir já fecha e a janela pula
+// pra semana depois, até a sexta seguinte chegar.
 function calcularLimites() {
   const hoje = new Date();
-  const segundaAtual = segundaDaSemanaDe(hoje);
-  const sextaSeguinte = new Date(segundaAtual);
-  sextaSeguinte.setDate(segundaAtual.getDate() + 11); // +7 (próxima semana) +4 (sexta)
-  return { min: toISO(segundaAtual), max: toISO(sextaSeguinte) };
+  const diaSemana = hoje.getDay(); // 0=Dom .. 6=Sáb
+  const passouDaSexta = diaSemana === 0 || diaSemana === 6; // sábado ou domingo
+  const segundaAlvo = segundaDaSemanaDe(hoje);
+  segundaAlvo.setDate(segundaAlvo.getDate() + (passouDaSexta ? 14 : 7));
+  const sextaAlvo = new Date(segundaAlvo);
+  sextaAlvo.setDate(segundaAlvo.getDate() + 4);
+  return { min: toISO(segundaAlvo), max: toISO(sextaAlvo) };
 }
 
 export default function Agendar({ usuario }) {
   const { min, max } = useMemo(calcularLimites, []);
+  const hojeISO = useMemo(() => toISO(new Date()), []);
 
   const [professor, setProfessor] = useState(undefined); // undefined = verificando, null = sem cadastro
   const [data, setData] = useState('');
@@ -86,7 +94,7 @@ export default function Agendar({ usuario }) {
       setCarregandoMeus(true);
       try {
         const todas = await listarReservasDoProfessor(professorId);
-        const daSemanaAtualEmDiante = todas.filter((r) => r.data >= min);
+        const daSemanaAtualEmDiante = todas.filter((r) => r.data >= hojeISO);
         const grupos = new Map();
         daSemanaAtualEmDiante.forEach((r) => {
           if (!grupos.has(r.grupoId)) grupos.set(r.grupoId, []);
@@ -103,7 +111,7 @@ export default function Agendar({ usuario }) {
         setCarregandoMeus(false);
       }
     },
-    [min]
+    [hojeISO]
   );
 
   useEffect(() => {
