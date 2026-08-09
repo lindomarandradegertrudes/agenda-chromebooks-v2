@@ -8,12 +8,13 @@ import {
   toISO,
 } from '../lib/schedule-config';
 import {
-  listarProfessores,
   listarReservasDaData,
   listarBloqueiosDaData,
   criarReservas,
   listarReservasDoProfessor,
   cancelarGrupo,
+  buscarProfessorPorEmail,
+  criarProfessor,
 } from '../lib/firestore-api';
 import { fmtDataBR } from '../lib/format';
 import ConfirmInline from '../components/ConfirmInline';
@@ -28,11 +29,10 @@ function calcularLimites() {
   return { min: toISO(segundaAtual), max: toISO(sextaSeguinte) };
 }
 
-export default function Agendar() {
+export default function Agendar({ usuario }) {
   const { min, max } = useMemo(calcularLimites, []);
 
-  const [professores, setProfessores] = useState([]);
-  const [professorId, setProfessorId] = useState('');
+  const [professor, setProfessor] = useState(undefined); // undefined = verificando, null = sem cadastro
   const [data, setData] = useState('');
   const [kit, setKit] = useState('vermelho');
   const [local, setLocal] = useState('');
@@ -49,9 +49,13 @@ export default function Agendar() {
   const [mensagem, setMensagem] = useState('');
   const [erro, setErro] = useState('');
 
+  const carregarProfessor = useCallback(async () => {
+    setProfessor(await buscarProfessorPorEmail(usuario.email));
+  }, [usuario.email]);
+
   useEffect(() => {
-    listarProfessores().then(setProfessores);
-  }, []);
+    carregarProfessor();
+  }, [carregarProfessor]);
 
   useEffect(() => {
     if (!data) {
@@ -74,14 +78,14 @@ export default function Agendar() {
   }, [kit]);
 
   const carregarMeusAgendamentos = useCallback(
-    async (id) => {
-      if (!id) {
+    async (professorId) => {
+      if (!professorId) {
         setMeusAgendamentos([]);
         return;
       }
       setCarregandoMeus(true);
       try {
-        const todas = await listarReservasDoProfessor(id);
+        const todas = await listarReservasDoProfessor(professorId);
         const daSemanaAtualEmDiante = todas.filter((r) => r.data >= min);
         const grupos = new Map();
         daSemanaAtualEmDiante.forEach((r) => {
@@ -103,8 +107,8 @@ export default function Agendar() {
   );
 
   useEffect(() => {
-    carregarMeusAgendamentos(professorId);
-  }, [professorId, carregarMeusAgendamentos]);
+    carregarMeusAgendamentos(professor?.id);
+  }, [professor, carregarMeusAgendamentos]);
 
   const { dia: diaSemana, ids: periodosDoDiaIds } = data ? periodosDoDia(data) : { dia: null, ids: [] };
 
@@ -129,9 +133,8 @@ export default function Agendar() {
     setErro('');
     setMensagem('');
 
-    const professor = professores.find((p) => p.id === professorId);
     if (!professor) {
-      setErro('Escolha um(a) professor(a).');
+      setErro('Complete seu cadastro de professor(a) antes de agendar.');
       return;
     }
     if (!data) {
@@ -160,7 +163,7 @@ export default function Agendar() {
         professorId: professor.id,
         professorNome: professor.nome,
         professorArea: professor.area,
-        professorEmail: professor.email || '',
+        professorEmail: professor.email,
         grupoId,
       }));
       await criarReservas(itens);
@@ -170,7 +173,7 @@ export default function Agendar() {
       const [reservas, bloqueios] = await Promise.all([listarReservasDaData(data), listarBloqueiosDaData(data)]);
       setReservasDoDia(reservas);
       setBloqueiosDoDia(bloqueios);
-      await carregarMeusAgendamentos(professorId);
+      await carregarMeusAgendamentos(professor.id);
     } catch {
       setErro('Não foi possível agendar. Tente novamente.');
     } finally {
@@ -180,7 +183,7 @@ export default function Agendar() {
 
   async function handleCancelarGrupo(grupoId) {
     await cancelarGrupo(grupoId);
-    await carregarMeusAgendamentos(professorId);
+    await carregarMeusAgendamentos(professor?.id);
     if (data) {
       const [reservas, bloqueios] = await Promise.all([listarReservasDaData(data), listarBloqueiosDaData(data)]);
       setReservasDoDia(reservas);
@@ -188,24 +191,34 @@ export default function Agendar() {
     }
   }
 
+  if (professor === undefined) {
+    return (
+      <section className="screen">
+        <h2>Agendar</h2>
+        <p className="muted">Carregando…</p>
+      </section>
+    );
+  }
+
+  if (professor === null) {
+    return (
+      <section className="screen">
+        <h2>Agendar</h2>
+        <CompletarCadastro usuario={usuario} onCadastrado={carregarProfessor} />
+      </section>
+    );
+  }
+
   return (
     <section className="screen">
       <h2>Agendar</h2>
 
       <form className="card form" onSubmit={handleSubmit}>
-        <div className="form-row">
-          <label>
-            Professor(a)
-            <select value={professorId} onChange={(e) => setProfessorId(e.target.value)}>
-              <option value="">Selecione…</option>
-              {professores.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nome}
-                </option>
-              ))}
-            </select>
-          </label>
+        <p className="muted">
+          Agendando como <strong>{professor.nome}</strong> ({professor.area})
+        </p>
 
+        <div className="form-row">
           <label>
             Data
             <input type="date" min={min} max={max} value={data} onChange={(e) => setData(e.target.value)} />
@@ -290,41 +303,86 @@ export default function Agendar() {
         </button>
       </form>
 
-      {professorId && (
-        <div className="card">
-          <h3>Meus agendamentos</h3>
-          {carregandoMeus ? (
-            <p className="muted">Carregando…</p>
-          ) : meusAgendamentos.length === 0 ? (
-            <p className="muted">Nenhum agendamento a partir desta semana.</p>
-          ) : (
-            <ul className="agendamentos-list">
-              {meusAgendamentos.map(({ grupoId, itens }) => {
-                const primeiro = itens[0];
-                return (
-                  <li key={grupoId} className="agendamento-item">
-                    <div>
-                      <strong>
-                        {primeiro.diaSemana}, {fmtDataBR(primeiro.data)}
-                      </strong>
-                      <span className={`kit-badge kit-${primeiro.kit}`}>{KITS[primeiro.kit]?.nome}</span>
-                      <span className="muted"> · {primeiro.local}</span>
-                      <div className="periodo-tags">
-                        {itens.map((i) => (
-                          <span key={i.id} className="periodo-tag">
-                            {TODOS_PERIODOS[i.periodoId]?.label}
-                          </span>
-                        ))}
-                      </div>
+      <div className="card">
+        <h3>Meus agendamentos</h3>
+        {carregandoMeus ? (
+          <p className="muted">Carregando…</p>
+        ) : meusAgendamentos.length === 0 ? (
+          <p className="muted">Nenhum agendamento a partir desta semana.</p>
+        ) : (
+          <ul className="agendamentos-list">
+            {meusAgendamentos.map(({ grupoId, itens }) => {
+              const primeiro = itens[0];
+              return (
+                <li key={grupoId} className="agendamento-item">
+                  <div>
+                    <strong>
+                      {primeiro.diaSemana}, {fmtDataBR(primeiro.data)}
+                    </strong>
+                    <span className={`kit-badge kit-${primeiro.kit}`}>{KITS[primeiro.kit]?.nome}</span>
+                    <span className="muted"> · {primeiro.local}</span>
+                    <div className="periodo-tags">
+                      {itens.map((i) => (
+                        <span key={i.id} className="periodo-tag">
+                          {TODOS_PERIODOS[i.periodoId]?.label}
+                        </span>
+                      ))}
                     </div>
-                    <ConfirmInline onConfirm={() => handleCancelarGrupo(grupoId)} />
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </div>
-      )}
+                  </div>
+                  <ConfirmInline onConfirm={() => handleCancelarGrupo(grupoId)} />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
     </section>
+  );
+}
+
+function CompletarCadastro({ usuario, onCadastrado }) {
+  const [nome, setNome] = useState(usuario.displayName || '');
+  const [area, setArea] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErro('');
+    if (!nome.trim() || !area.trim()) {
+      setErro('Preencha nome e matéria.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await criarProfessor({ nome: nome.trim(), area: area.trim(), email: usuario.email });
+      await onCadastrado();
+    } catch {
+      setErro('Não foi possível salvar. Tente novamente.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <form className="card form" onSubmit={handleSubmit}>
+      <p className="muted">
+        Primeiro acesso — complete seu cadastro pra poder agendar (e-mail: {usuario.email}).
+      </p>
+      <div className="form-row">
+        <label>
+          Nome
+          <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
+        </label>
+        <label>
+          Matéria
+          <input value={area} onChange={(e) => setArea(e.target.value)} placeholder="Ex.: Matemática" />
+        </label>
+      </div>
+      {erro && <p className="form-error">{erro}</p>}
+      <button type="submit" className="btn btn-primary" disabled={salvando}>
+        {salvando ? 'Salvando…' : 'Concluir cadastro'}
+      </button>
+    </form>
   );
 }

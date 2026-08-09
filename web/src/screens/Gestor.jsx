@@ -37,6 +37,11 @@ export default function Gestor() {
     setEntrando(true);
     try {
       await autenticarGestor(codigo);
+      // getIdToken(true) dentro de autenticarGestor já buscou o token novo
+      // com a claim — onAuthStateChanged não dispara de novo só por causa
+      // de refresh, então atualizamos o estado aqui direto.
+      const resultado = await auth.currentUser.getIdTokenResult();
+      setAutenticado(resultado.claims.gestor === true);
     } catch (err) {
       setErroCodigo(err.message);
     } finally {

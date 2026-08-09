@@ -52,6 +52,13 @@ body {
   font-size: 1.5rem;
 }
 
+.app-header-user {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
 .app-subtitle {
   margin: 4px 0 0;
   color: var(--cor-muted);

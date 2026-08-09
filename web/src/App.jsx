@@ -5,7 +5,7 @@ import GradeSemana from './screens/GradeSemana';
 import Professores from './screens/Professores';
 import Gestor from './screens/Gestor';
 import { auth } from './lib/firebase';
-import { autenticarAcesso, sair } from './lib/auth';
+import { entrarComGoogle, processarRetornoLogin, sair, DOMINIO_PERMITIDO } from './lib/auth';
 
 const ABAS = [
   { id: 'agendar', label: 'Agendar' },
@@ -14,22 +14,26 @@ const ABAS = [
   { id: 'gestor', label: 'Área do gestor' },
 ];
 
+function emailPermitido(user) {
+  return Boolean(user && user.email && user.email.endsWith(`@${DOMINIO_PERMITIDO}`));
+}
+
 export default function App() {
-  const [autenticado, setAutenticado] = useState(null); // null = verificando
+  const [usuario, setUsuario] = useState(null); // undefined = verificando, null = não logado
   const [aba, setAba] = useState('agendar');
+  const [erroLogin, setErroLogin] = useState('');
 
   useEffect(() => {
-    return onAuthStateChanged(auth, async (user) => {
-      if (!user) {
-        setAutenticado(false);
-        return;
-      }
-      const resultado = await user.getIdTokenResult();
-      setAutenticado(resultado.claims.acesso === true);
+    processarRetornoLogin().catch((err) => setErroLogin(err.message));
+  }, []);
+
+  useEffect(() => {
+    return onAuthStateChanged(auth, (user) => {
+      setUsuario(emailPermitido(user) ? user : null);
     });
   }, []);
 
-  if (autenticado === null) {
+  if (usuario === undefined) {
     return (
       <div className="app-shell">
         <p className="muted" style={{ padding: 24 }}>
@@ -39,8 +43,8 @@ export default function App() {
     );
   }
 
-  if (!autenticado) {
-    return <PortaoDeEntrada />;
+  if (!usuario) {
+    return <PortaoDeEntrada erroInicial={erroLogin} />;
   }
 
   return (
@@ -50,9 +54,12 @@ export default function App() {
           <h1>Agenda dos Kits Chromebook</h1>
           <p className="app-subtitle">Escola Agrícola Municipal Carlos Heins Funke</p>
         </div>
-        <button type="button" className="btn btn-ghost" onClick={sair}>
-          Sair
-        </button>
+        <div className="app-header-user">
+          <span className="muted">{usuario.email}</span>
+          <button type="button" className="btn btn-ghost" onClick={sair}>
+            Sair
+          </button>
+        </div>
       </header>
 
       <nav className="app-nav">
@@ -69,7 +76,7 @@ export default function App() {
       </nav>
 
       <main className="app-main">
-        {aba === 'agendar' && <Agendar />}
+        {aba === 'agendar' && <Agendar usuario={usuario} />}
         {aba === 'grade' && <GradeSemana />}
         {aba === 'professores' && <Professores />}
         {aba === 'gestor' && <Gestor />}
@@ -78,21 +85,15 @@ export default function App() {
   );
 }
 
-function PortaoDeEntrada() {
-  const [codigo, setCodigo] = useState('');
-  const [erro, setErro] = useState('');
-  const [entrando, setEntrando] = useState(false);
+function PortaoDeEntrada({ erroInicial }) {
+  const [erro, setErro] = useState(erroInicial || '');
 
-  async function handleSubmit(e) {
-    e.preventDefault();
+  async function handleEntrar() {
     setErro('');
-    setEntrando(true);
     try {
-      await autenticarAcesso(codigo);
-    } catch (err) {
-      setErro(err.message);
-    } finally {
-      setEntrando(false);
+      await entrarComGoogle();
+    } catch {
+      setErro('Não foi possível entrar. Tente novamente.');
     }
   }
 
@@ -107,21 +108,13 @@ function PortaoDeEntrada() {
       <main className="app-main">
         <section className="screen">
           <h2>Acesso restrito</h2>
-          <form className="card form gate-form" onSubmit={handleSubmit}>
-            <label>
-              Código de acesso
-              <input
-                type="password"
-                value={codigo}
-                onChange={(e) => setCodigo(e.target.value)}
-                placeholder="Digite o código"
-              />
-            </label>
+          <div className="card gate-form">
+            <p className="muted">Entre com sua conta Google institucional da escola (@{DOMINIO_PERMITIDO}).</p>
             {erro && <p className="form-error">{erro}</p>}
-            <button type="submit" className="btn btn-primary" disabled={entrando}>
-              {entrando ? 'Entrando…' : 'Entrar'}
+            <button type="button" className="btn btn-primary" onClick={handleEntrar}>
+              Entrar com Google
             </button>
-          </form>
+          </div>
         </section>
       </main>
     </div>

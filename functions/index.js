@@ -34,10 +34,6 @@ const EMAIL_PASS = defineSecret('EMAIL_PASS');
 // `firebase functions:secrets:set GESTOR_CODE`.
 const GESTOR_CODE = defineSecret('GESTOR_CODE');
 
-// Código de acesso geral ao site (professores/funcionários da escola em
-// geral). Configurar com `firebase functions:secrets:set ACESSO_CODE`.
-const ACESSO_CODE = defineSecret('ACESSO_CODE');
-
 // ID da Google Sheet que recebe a agenda da semana (a parte entre /d/ e /edit
 // na URL da planilha). Crie uma planilha, compartilhe com o e-mail da conta
 // de serviço das Cloud Functions (Editor) e cole o ID aqui — o `firebase
@@ -97,56 +93,23 @@ exports.testarEnvioAgora = onRequest(
 );
 
 /**
- * Valida o código geral de acesso ao site e, se correto, devolve um custom
- * token do Firebase Auth com a claim `acesso: true`. Sem essa claim, as
- * firestore.rules bloqueiam qualquer leitura/escrita — é o portão de entrada
- * do site inteiro, restrito ao pessoal da escola.
- */
-exports.autenticarAcesso = onCall({ secrets: [ACESSO_CODE], region: 'southamerica-east1' }, async (request) => {
-  const codigo = request.data && request.data.codigo;
-  if (!codigo || codigo !== ACESSO_CODE.value()) {
-    throw new HttpsError('permission-denied', 'Código incorreto.');
-  }
-  await garantirClaims('acesso', { acesso: true });
-  const token = await getAuth().createCustomToken('acesso', { acesso: true });
-  return { token };
-});
-
-/**
- * Valida o código da área do gestor e, se correto, devolve um custom token
- * com as claims `acesso: true` e `gestor: true` — a claim `acesso` também
- * vai junto pra logar como gestor não derrubar o acesso geral ao site (o
- * Firebase Auth só mantém uma sessão por vez no navegador).
+ * Valida o código da área do gestor e, se correto, marca a claim
+ * `gestor: true` permanentemente na conta Google já logada (via
+ * setCustomUserClaims, não um custom token novo — trocar de token trocaria
+ * de usuário e perderia a identidade do login com Google). O frontend força
+ * um refresh do ID token depois de chamar isso pra claim aparecer.
  */
 exports.autenticarGestor = onCall({ secrets: [GESTOR_CODE], region: 'southamerica-east1' }, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError('unauthenticated', 'Você precisa estar logado.');
+  }
   const codigo = request.data && request.data.codigo;
   if (!codigo || codigo !== GESTOR_CODE.value()) {
     throw new HttpsError('permission-denied', 'Código incorreto.');
   }
-  await garantirClaims('gestor', { acesso: true, gestor: true });
-  const token = await getAuth().createCustomToken('gestor', { acesso: true, gestor: true });
-  return { token };
+  await getAuth().setCustomUserClaims(request.auth.uid, { gestor: true });
+  return { ok: true };
 });
-
-/**
- * `createCustomToken(uid, claims)` só embute as claims no primeiro token —
- * quando o navegador renova o login sozinho depois (refresh token, sem
- * passar de novo por essa function), a claim some se não estiver também
- * persistida no registro do usuário via `setCustomUserClaims`. Por isso
- * toda autenticação passa por aqui antes de mintar o token.
- */
-async function garantirClaims(uid, claims) {
-  try {
-    await getAuth().setCustomUserClaims(uid, claims);
-  } catch (err) {
-    if (err.code === 'auth/user-not-found') {
-      await getAuth().createUser({ uid });
-      await getAuth().setCustomUserClaims(uid, claims);
-    } else {
-      throw err;
-    }
-  }
-}
 
 async function executarEnvio() {
   const { inicio, fim } = calcularProximaSemana();

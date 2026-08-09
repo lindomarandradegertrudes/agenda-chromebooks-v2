@@ -28,6 +28,13 @@ export async function criarProfessor({ nome, area, email }) {
   });
 }
 
+export async function buscarProfessorPorEmail(email) {
+  const snap = await getDocs(query(collection(db, 'professores'), where('email', '==', email)));
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data() };
+}
+
 // gestores
 
 export async function listarGestores() {
