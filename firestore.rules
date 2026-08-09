@@ -1,40 +1,39 @@
 rules_version = '2';
 
-// Nível de proteção mínimo (ver PROJECT_SPEC.md — "Opção mínima"):
-// - gestores e bloqueios exigem a claim `gestor: true`, obtida via login com
-//   custom token depois de validar o código no servidor (função
-//   `autenticarGestor` em functions/index.js) — o código nunca fica exposto
-//   no navegador, diferente do antigo VITE_GESTOR_CODE.
-// - professores (ler/criar) e reservas (criar/cancelar) continuam abertos,
-//   já que são ações que qualquer professor precisa fazer o tempo todo e
-//   não há autenticação de professor implementada.
+// O site inteiro agora exige login (claim `acesso: true`, obtida via o
+// portão de entrada — função `autenticarAcesso` em functions/index.js).
+// Por cima disso, `gestores` e `bloqueios` exigem a claim `gestor: true`
+// (função `autenticarGestor`), pra ações administrativas. Nenhum dos dois
+// códigos fica exposto no navegador — só o servidor os conhece.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    function autenticado() {
+      return request.auth != null && request.auth.token.acesso == true;
+    }
 
     function ehGestor() {
       return request.auth != null && request.auth.token.gestor == true;
     }
 
     match /professores/{id} {
-      allow read: if true;
-      allow write: if true;
+      allow read, write: if autenticado();
     }
 
     match /gestores/{id} {
-      allow read: if true;
+      allow read: if autenticado();
       allow write: if ehGestor();
     }
 
     match /reservas/{id} {
-      allow read: if true;
-      allow create: if true;
-      // Cancelamento (próprio ou pelo gestor) continua sem exigir login —
-      // não há identidade de professor autenticada para diferenciar os dois casos.
-      allow update, delete: if true;
+      allow read, create: if autenticado();
+      // Cancelamento (próprio ou pelo gestor) só exige estar logado — não
+      // há identidade de professor individual pra diferenciar os dois casos.
+      allow update, delete: if autenticado();
     }
 
     match /bloqueios/{id} {
-      allow read: if true;
+      allow read: if autenticado();
       allow write: if ehGestor();
     }
   }
