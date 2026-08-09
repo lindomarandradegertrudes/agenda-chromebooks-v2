@@ -21,10 +21,9 @@ import ConfirmInline from '../components/ConfirmInline';
 
 const KIT_IDS = Object.keys(KITS);
 
-// Só é possível agendar para UMA semana por vez — a próxima — e só até a
-// sexta-feira que a antecede. Depois que essa sexta passa (ou seja, a
-// partir do sábado), a semana que viria a seguir já fecha e a janela pula
-// pra semana depois, até a sexta seguinte chegar.
+// Abre a janela de agendamento nas DUAS semanas seguintes à próxima
+// sexta-feira que fecha o prazo — depois que essa sexta passa (a partir do
+// sábado), a janela pula pra frente, sempre mantendo duas semanas abertas.
 function calcularLimites() {
   const hoje = new Date();
   const diaSemana = hoje.getDay(); // 0=Dom .. 6=Sáb
@@ -32,7 +31,7 @@ function calcularLimites() {
   const segundaAlvo = segundaDaSemanaDe(hoje);
   segundaAlvo.setDate(segundaAlvo.getDate() + (passouDaSexta ? 14 : 7));
   const sextaAlvo = new Date(segundaAlvo);
-  sextaAlvo.setDate(segundaAlvo.getDate() + 4);
+  sextaAlvo.setDate(segundaAlvo.getDate() + 11); // +11 = sexta da semana seguinte (duas semanas)
   return { min: toISO(segundaAlvo), max: toISO(sextaAlvo) };
 }
 

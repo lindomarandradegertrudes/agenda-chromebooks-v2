@@ -12,9 +12,11 @@ import {
   listarProfessores,
   criarProfessor,
   removerProfessor,
+  criarReservas,
 } from '../lib/firestore-api';
 import { auth } from '../lib/firebase';
 import { autenticarGestor } from '../lib/auth';
+import { fmtDataBR } from '../lib/format';
 import ConfirmInline from '../components/ConfirmInline';
 
 export default function Gestor() {
@@ -87,11 +89,224 @@ export default function Gestor() {
   return (
     <section className="screen">
       <h2>Área do gestor</h2>
+      <AgendarParaProfessor />
       <GerenciarReservas />
       <BloquearPeriodo />
       <ProfessoresGestor />
       <Gestores />
     </section>
+  );
+}
+
+function AgendarParaProfessor() {
+  const [professores, setProfessores] = useState([]);
+  const [professorId, setProfessorId] = useState('');
+  const [data, setData] = useState('');
+  const [kit, setKit] = useState('vermelho');
+  const [local, setLocal] = useState('');
+  const [periodosSelecionados, setPeriodosSelecionados] = useState(new Set());
+  const [reservasDoDia, setReservasDoDia] = useState([]);
+  const [bloqueiosDoDia, setBloqueiosDoDia] = useState([]);
+  const [carregandoDia, setCarregandoDia] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  const [mensagem, setMensagem] = useState('');
+  const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    listarProfessores().then(setProfessores);
+  }, []);
+
+  useEffect(() => {
+    if (!data) {
+      setReservasDoDia([]);
+      setBloqueiosDoDia([]);
+      return;
+    }
+    setCarregandoDia(true);
+    setPeriodosSelecionados(new Set());
+    Promise.all([listarReservasDaData(data), listarBloqueiosDaData(data)])
+      .then(([reservas, bloqueios]) => {
+        setReservasDoDia(reservas);
+        setBloqueiosDoDia(bloqueios);
+      })
+      .finally(() => setCarregandoDia(false));
+  }, [data]);
+
+  useEffect(() => {
+    setPeriodosSelecionados(new Set());
+  }, [kit]);
+
+  const { dia: diaSemana, ids: periodosDoDiaIds } = data ? periodosDoDia(data) : { dia: null, ids: [] };
+
+  function statusDoPeriodo(periodoId) {
+    if (bloqueiosDoDia.some((b) => b.periodos?.includes(periodoId))) return 'bloqueado';
+    if (reservasDoDia.some((r) => r.periodoId === periodoId && r.kit === kit)) return 'reservado';
+    return 'livre';
+  }
+
+  function togglePeriodo(periodoId) {
+    if (statusDoPeriodo(periodoId) !== 'livre') return;
+    setPeriodosSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(periodoId)) next.delete(periodoId);
+      else next.add(periodoId);
+      return next;
+    });
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setErro('');
+    setMensagem('');
+
+    const professor = professores.find((p) => p.id === professorId);
+    if (!professor) {
+      setErro('Escolha um(a) professor(a).');
+      return;
+    }
+    if (!data) {
+      setErro('Escolha uma data.');
+      return;
+    }
+    const localFinal = kit === 'vermelho' ? KITS.vermelho.restrito : local.trim();
+    if (!localFinal) {
+      setErro('Informe o local (sala/turma).');
+      return;
+    }
+    if (periodosSelecionados.size === 0) {
+      setErro('Selecione ao menos um período.');
+      return;
+    }
+
+    setEnviando(true);
+    try {
+      const grupoId = crypto.randomUUID();
+      const itens = [...periodosSelecionados].map((periodoId) => ({
+        data,
+        diaSemana,
+        periodoId,
+        kit,
+        local: localFinal,
+        professorId: professor.id,
+        professorNome: professor.nome,
+        professorArea: professor.area,
+        professorEmail: professor.email,
+        grupoId,
+      }));
+      await criarReservas(itens);
+      setMensagem('Agendamento confirmado!');
+      setPeriodosSelecionados(new Set());
+      setLocal('');
+      const [reservas, bloqueios] = await Promise.all([listarReservasDaData(data), listarBloqueiosDaData(data)]);
+      setReservasDoDia(reservas);
+      setBloqueiosDoDia(bloqueios);
+    } catch {
+      setErro('Não foi possível agendar. Tente novamente.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h3>Agendar para um(a) professor(a)</h3>
+      <p className="muted">Sem restrição de data — o gestor pode agendar qualquer período, de qualquer semana.</p>
+      <form className="form" onSubmit={handleSubmit}>
+        <div className="form-row">
+          <label>
+            Professor(a)
+            <select value={professorId} onChange={(e) => setProfessorId(e.target.value)}>
+              <option value="">Selecione…</option>
+              {professores.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nome}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Data
+            <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+          </label>
+        </div>
+
+        <div className="form-row">
+          <label>
+            Kit
+            <div className="kit-picker">
+              {Object.keys(KITS).map((id) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`kit-btn kit-${id}${kit === id ? ' active' : ''}`}
+                  onClick={() => setKit(id)}
+                >
+                  {KITS[id].nome}
+                </button>
+              ))}
+            </div>
+          </label>
+          <label>
+            Local
+            {kit === 'vermelho' ? (
+              <input value={KITS.vermelho.restrito} disabled />
+            ) : (
+              <input
+                value={local}
+                onChange={(e) => setLocal(e.target.value)}
+                placeholder="Ex.: Sala 12 / Turma 8ºA"
+              />
+            )}
+          </label>
+        </div>
+
+        {data ? (
+          <div className="periodos-picker">
+            <p className="field-label">
+              Períodos — {diaSemana}, {fmtDataBR(data)}
+            </p>
+            {carregandoDia ? (
+              <p className="muted">Carregando…</p>
+            ) : (
+              <div className="periodos-grid">
+                {periodosDoDiaIds.map((id) => {
+                  const p = TODOS_PERIODOS[id];
+                  const status = statusDoPeriodo(id);
+                  const selecionado = periodosSelecionados.has(id);
+                  return (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`periodo-chip status-${status}${selecionado ? ' selected' : ''}`}
+                      disabled={status !== 'livre'}
+                      onClick={() => togglePeriodo(id)}
+                      title={status === 'bloqueado' ? 'Período bloqueado' : status === 'reservado' ? 'Já reservado' : ''}
+                    >
+                      <span className="periodo-label">{p.label}</span>
+                      <span className="periodo-horario">
+                        {p.inicio}–{p.fim}
+                      </span>
+                      <span className="periodo-status">
+                        {status === 'livre' ? 'Livre' : status === 'reservado' ? 'Reservado' : 'Bloqueado'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="muted">Escolha uma data pra ver os períodos disponíveis.</p>
+        )}
+
+        {erro && <p className="form-error">{erro}</p>}
+        {mensagem && <p className="form-success">{mensagem}</p>}
+
+        <button type="submit" className="btn btn-primary" disabled={enviando}>
+          {enviando ? 'Agendando…' : 'Confirmar agendamento'}
+        </button>
+      </form>
+    </div>
   );
 }
 
