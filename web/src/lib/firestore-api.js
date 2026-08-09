@@ -35,6 +35,10 @@ export async function buscarProfessorPorEmail(email) {
   return { id: d.id, ...d.data() };
 }
 
+export async function removerProfessor(id) {
+  await deleteDoc(doc(db, 'professores', id));
+}
+
 // gestores
 
 export async function listarGestores() {

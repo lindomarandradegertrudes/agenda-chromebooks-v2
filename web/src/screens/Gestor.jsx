@@ -9,6 +9,8 @@ import {
   removerBloqueio,
   listarGestores,
   criarGestor,
+  listarProfessores,
+  removerProfessor,
 } from '../lib/firestore-api';
 import { auth } from '../lib/firebase';
 import { autenticarGestor } from '../lib/auth';
@@ -86,8 +88,56 @@ export default function Gestor() {
       <h2>Área do gestor</h2>
       <GerenciarReservas />
       <BloquearPeriodo />
+      <ProfessoresGestor />
       <Gestores />
     </section>
+  );
+}
+
+function ProfessoresGestor() {
+  const [professores, setProfessores] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+
+  async function carregar() {
+    setCarregando(true);
+    try {
+      setProfessores(await listarProfessores());
+    } finally {
+      setCarregando(false);
+    }
+  }
+
+  useEffect(() => {
+    carregar();
+  }, []);
+
+  async function handleRemover(id) {
+    await removerProfessor(id);
+    await carregar();
+  }
+
+  return (
+    <div className="card">
+      <h3>Professores</h3>
+      {carregando ? (
+        <p className="muted">Carregando…</p>
+      ) : professores.length === 0 ? (
+        <p className="muted">Nenhum professor cadastrado ainda.</p>
+      ) : (
+        <ul className="agendamentos-list">
+          {professores.map((p) => (
+            <li key={p.id} className="agendamento-item">
+              <div>
+                <strong>{p.nome}</strong>
+                <span className="muted"> · {p.area}</span>
+                <div className="muted">{p.email}</div>
+              </div>
+              <ConfirmInline onConfirm={() => handleRemover(p.id)} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
