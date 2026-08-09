@@ -10,6 +10,7 @@ import {
   listarGestores,
   criarGestor,
   listarProfessores,
+  criarProfessor,
   removerProfessor,
 } from '../lib/firestore-api';
 import { auth } from '../lib/firebase';
@@ -97,6 +98,11 @@ export default function Gestor() {
 function ProfessoresGestor() {
   const [professores, setProfessores] = useState([]);
   const [carregando, setCarregando] = useState(true);
+  const [nome, setNome] = useState('');
+  const [area, setArea] = useState('');
+  const [email, setEmail] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState('');
 
   async function carregar() {
     setCarregando(true);
@@ -111,6 +117,27 @@ function ProfessoresGestor() {
     carregar();
   }, []);
 
+  async function handleCadastrar(e) {
+    e.preventDefault();
+    setErro('');
+    if (!nome.trim() || !area.trim() || !email.trim()) {
+      setErro('Preencha nome, matéria e e-mail.');
+      return;
+    }
+    setSalvando(true);
+    try {
+      await criarProfessor({ nome: nome.trim(), area: area.trim(), email: email.trim() });
+      setNome('');
+      setArea('');
+      setEmail('');
+      await carregar();
+    } catch {
+      setErro('Não foi possível salvar. Tente novamente.');
+    } finally {
+      setSalvando(false);
+    }
+  }
+
   async function handleRemover(id) {
     await removerProfessor(id);
     await carregar();
@@ -119,6 +146,32 @@ function ProfessoresGestor() {
   return (
     <div className="card">
       <h3>Professores</h3>
+      <form className="form" onSubmit={handleCadastrar}>
+        <div className="form-row">
+          <label>
+            Nome
+            <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
+          </label>
+          <label>
+            Matéria
+            <input value={area} onChange={(e) => setArea(e.target.value)} placeholder="Ex.: Matemática" />
+          </label>
+          <label>
+            E-mail
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nome@edu.joinville.sc.gov.br"
+            />
+          </label>
+        </div>
+        {erro && <p className="form-error">{erro}</p>}
+        <button type="submit" className="btn btn-primary" disabled={salvando}>
+          {salvando ? 'Salvando…' : 'Cadastrar professor(a)'}
+        </button>
+      </form>
+
       {carregando ? (
         <p className="muted">Carregando…</p>
       ) : professores.length === 0 ? (
