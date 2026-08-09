@@ -107,6 +107,7 @@ exports.autenticarAcesso = onCall({ secrets: [ACESSO_CODE], region: 'southameric
   if (!codigo || codigo !== ACESSO_CODE.value()) {
     throw new HttpsError('permission-denied', 'Código incorreto.');
   }
+  await garantirClaims('acesso', { acesso: true });
   const token = await getAuth().createCustomToken('acesso', { acesso: true });
   return { token };
 });
@@ -122,9 +123,30 @@ exports.autenticarGestor = onCall({ secrets: [GESTOR_CODE], region: 'southameric
   if (!codigo || codigo !== GESTOR_CODE.value()) {
     throw new HttpsError('permission-denied', 'Código incorreto.');
   }
+  await garantirClaims('gestor', { acesso: true, gestor: true });
   const token = await getAuth().createCustomToken('gestor', { acesso: true, gestor: true });
   return { token };
 });
+
+/**
+ * `createCustomToken(uid, claims)` só embute as claims no primeiro token —
+ * quando o navegador renova o login sozinho depois (refresh token, sem
+ * passar de novo por essa function), a claim some se não estiver também
+ * persistida no registro do usuário via `setCustomUserClaims`. Por isso
+ * toda autenticação passa por aqui antes de mintar o token.
+ */
+async function garantirClaims(uid, claims) {
+  try {
+    await getAuth().setCustomUserClaims(uid, claims);
+  } catch (err) {
+    if (err.code === 'auth/user-not-found') {
+      await getAuth().createUser({ uid });
+      await getAuth().setCustomUserClaims(uid, claims);
+    } else {
+      throw err;
+    }
+  }
+}
 
 async function executarEnvio() {
   const { inicio, fim } = calcularProximaSemana();
