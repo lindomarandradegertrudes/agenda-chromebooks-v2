@@ -2,7 +2,7 @@
 
 Site de agendamento dos kits de Chromebook da **Escola Agrícola Municipal Carlos Heins Funke** (Joinville/SC).
 
-🔗 **Site em produção:** https://agenda-chromebooks.vercel.app (acesso restrito por login — só para funcionários da escola)
+🔗 **Site em produção:** https://agenda-chromebooks.vercel.app (acesso restrito a contas Google `@edu.joinville.sc.gov.br`)
 
 Substitui o controle manual por planilha: professores agendam os kits pelo site, e toda sexta-feira ao meio-dia um resumo da semana seguinte é enviado automaticamente por e-mail — sem nenhum passo manual.
 
@@ -12,15 +12,17 @@ Substitui o controle manual por planilha: professores agendam os kits pelo site,
 - **Banco de dados:** Firebase Firestore
 - **Backend/automação:** Firebase Cloud Functions ([`functions/`](functions))
 - **Hospedagem do frontend:** Vercel
+- **Autenticação:** Firebase Auth (Google Sign-In restrito ao domínio institucional da escola)
 - **E-mail:** Nodemailer via Gmail SMTP
 - **Planilha semanal:** Google Sheets API
 
 ## Funcionalidades
 
-- **Agendar** — escolher professor(a), data (semana atual + próxima), kit (🔴 vermelho / 🔵 azul / 🟡 amarelo) e períodos livres; cancelamento dos próprios agendamentos.
+- **Login** — Google Sign-In restrito a `@edu.joinville.sc.gov.br`; sem senha compartilhada. A identidade logada é amarrada a cada reserva/cadastro (ninguém agenda em nome de outra pessoa).
+- **Agendar** — o site já identifica o professor(a) pelo login (cadastro de nome/matéria só na primeira vez); escolher data (próximas duas semanas, fechando na sexta-feira anterior a cada semana — ver `calcularLimites` em `Agendar.jsx`), kit (🔴 vermelho / 🔵 azul / 🟡 amarelo) e períodos livres; cancelamento dos próprios agendamentos.
 - **Grade da semana** — visão Segunda–Sexta de todos os kits, período por período.
-- **Professores** — cadastro e listagem.
-- **Área do gestor** — protegida por login (código validado no servidor via Cloud Function + Firebase Auth, não fica exposto no código do site): gerenciar/cancelar qualquer reserva, bloquear períodos, cadastrar gestores.
+- **Professores** — listagem (cadastro é automático no primeiro login de cada professor).
+- **Área do gestor** — protegida por um segundo código (validado no servidor, nunca exposto no bundle do site): agendar para qualquer professor(a) sem restrição de data, gerenciar/cancelar qualquer reserva, bloquear períodos, cadastrar/remover professores, cadastrar gestores.
 - **Envio automático** — toda sexta-feira 12h (horário de Brasília), a Cloud Function `enviarResumoSemanal`:
   - manda pra cada professor(a) com e-mail cadastrado só a agenda dele(a);
   - manda pra cada gestor(a) cadastrado(a) a agenda completa;
@@ -31,9 +33,10 @@ Substitui o controle manual por planilha: professores agendam os kits pelo site,
 ```
 firebase-project/
 ├── web/                  # Frontend React + Vite
+│   ├── vercel.json        # Proxy de /__/auth/* pro Firebase Auth (ver seção Autenticação)
 │   └── src/
 │       ├── screens/      # Agendar, GradeSemana, Professores, Gestor
-│       ├── lib/          # Firebase SDK, API do Firestore, regras de horário
+│       ├── lib/          # Firebase SDK, API do Firestore, auth, regras de horário
 │       └── components/   # Componentes compartilhados
 ├── functions/            # Cloud Functions (envio de e-mail, auth do gestor)
 ├── firestore.rules       # Regras de segurança do Firestore
@@ -77,14 +80,25 @@ Config não sensível (`SHEET_ID` da Google Sheet semanal) fica em `functions/.e
 
 ```bash
 firebase deploy --only firestore:rules,functions
-cd web && vercel --prod
+cd .. && vercel --prod   # rodar da raiz do repo, não de web/ — ver nota abaixo
 ```
 
-As variáveis `VITE_FIREBASE_*` precisam estar configuradas no painel do Vercel (Settings → Environment Variables), com os mesmos valores do `.env` local.
+As variáveis `VITE_FIREBASE_*` precisam estar configuradas no painel do Vercel (Settings → Environment Variables), com os mesmos valores do `.env` local. O projeto do Vercel tem **Root Directory = `web`**, então o CLI deve ser vinculado/rodado a partir da raiz do repositório, não de dentro de `web/`. Depois de um `vercel --prod`, o novo deployment **não** promove automaticamente o domínio `agenda-chromebooks.vercel.app` — rodar também `vercel alias set <url-do-deployment> agenda-chromebooks.vercel.app`.
+
+## Autenticação
+
+O login usa Google Sign-In restrito ao domínio da escola. Como o app roda no Vercel (não no Firebase Hosting), foi preciso resolver um problema conhecido: navegadores atuais (Chrome/Edge) particionam armazenamento entre domínios diferentes, quebrando silenciosamente o fluxo de login entre `agenda-chromebooks.vercel.app` e o `authDomain` padrão do Firebase (`*.firebaseapp.com`). A solução:
+
+1. `web/vercel.json` faz proxy de `/__/auth/*` pro `authDomain` real do Firebase.
+2. `VITE_FIREBASE_AUTH_DOMAIN` é configurado como o próprio domínio do site (`agenda-chromebooks.vercel.app`), não o `.firebaseapp.com`.
+3. `https://agenda-chromebooks.vercel.app/__/auth/handler` precisa estar na lista de "Authorized redirect URIs" do OAuth Client no [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (senão dá `Erro 400: redirect_uri_mismatch` depois do login).
+4. O domínio também precisa estar em Firebase Console → Authentication → Settings → Authorized domains.
+
+Se o domínio do site mudar no futuro, os passos 2–3 precisam ser refeitos.
 
 ## Segurança
 
-`gestores` e `bloqueios` exigem login validado no servidor (claim `gestor` no Firebase Auth). `professores` (ler/criar) e `reservas` (criar/cancelar) ficam abertos de propósito, para não travar o uso diário — ver `firestore.rules` para os detalhes e trade-offs.
+Todo o site exige login (`request.auth.token.email` termina em `@edu.joinville.sc.gov.br`, checado nas `firestore.rules`). `gestores` e `bloqueios` exigem além disso a claim `gestor: true` (concedida via `setCustomUserClaims` depois de validar o código da área do gestor). `reservas` e `professores` exigem que o e-mail do documento bata com o e-mail de quem está logado (função `ehDono()`), exceto para quem tem a claim de gestor — ver `firestore.rules` para os detalhes.
 
 ## Licença
 
