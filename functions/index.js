@@ -14,7 +14,7 @@
 const { onSchedule } = require('firebase-functions/v2/scheduler');
 const { onRequest, onCall, HttpsError } = require('firebase-functions/v2/https');
 const { initializeApp } = require('firebase-admin/app');
-const { getFirestore } = require('firebase-admin/firestore');
+const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const { getAuth } = require('firebase-admin/auth');
 const { defineSecret, defineString } = require('firebase-functions/params');
 const nodemailer = require('nodemailer');
@@ -61,6 +61,22 @@ const KITS = {
   amarelo: { nome: 'Kit Amarelo' },
 };
 const NOME_ESCOLA = 'Escola Agrícola Municipal Carlos Heins Funke';
+const DIA_JS_MAP = { 1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta' };
+
+// Reserva fixa e recorrente do Kit Vermelho: Segunda a Quinta, 5ª aula da
+// manhã e 1ª da tarde, "Projeto Maker" da Ana Lúcia Steinbach. Ver
+// garantirReservasProjetoMaker() — cria essas reservas automaticamente,
+// sempre mantendo algumas semanas de folga à frente, sem nunca "reviver"
+// um dia que tenha sido cancelado manualmente depois de criado.
+const PROJETO_MAKER = {
+  professorEmail: 'ana.steinbach@edu.joinville.sc.gov.br',
+  area: 'Projeto Maker',
+  kit: 'vermelho',
+  local: 'Sala Maker',
+  periodos: ['M5', 'T1'],
+  diasUteis: [1, 2, 3, 4], // 1=Segunda .. 4=Quinta (getDay())
+  semanasDeFolga: 6,
+};
 
 /**
  * Gatilho agendado — roda toda sexta-feira, entre 12h00 e 12h05 (horário de
@@ -112,6 +128,8 @@ exports.autenticarGestor = onCall({ secrets: [GESTOR_CODE], region: 'southameric
 });
 
 async function executarEnvio() {
+  await garantirReservasProjetoMaker();
+
   const { inicio, fim } = calcularProximaSemana();
 
   const reservasSnap = await db
@@ -145,6 +163,95 @@ async function executarEnvio() {
 }
 
 /**
+ * Cria automaticamente as reservas fixas do "Projeto Maker" (ver
+ * PROJETO_MAKER acima), sempre mantendo `semanasDeFolga` semanas de folga a
+ * partir de hoje. Usa um documento de controle (`config/projetoMakerHorizonte`)
+ * pra nunca reprocessar uma semana já criada — assim, se alguém cancelar um
+ * dia específico manualmente (feriado, imprevisto etc.), ele não é recriado
+ * sozinho na próxima execução.
+ */
+async function garantirReservasProjetoMaker() {
+  const professora = await buscarProfessorPorEmailAdmin(PROJETO_MAKER.professorEmail);
+  if (!professora) {
+    console.warn('Projeto Maker: professora não encontrada pelo e-mail cadastrado — pulando criação automática.');
+    return 0;
+  }
+
+  const hoje = new Date();
+  const segundaAtual = segundaDaSemana(hoje);
+
+  const controleRef = db.collection('config').doc('projetoMakerHorizonte');
+  const controleSnap = await controleRef.get();
+  let segundaBusca = segundaAtual;
+  if (controleSnap.exists && controleSnap.data().ultimaSemanaProcessada) {
+    const ultima = new Date(controleSnap.data().ultimaSemanaProcessada);
+    ultima.setDate(ultima.getDate() + 7);
+    if (ultima > segundaBusca) segundaBusca = ultima;
+  }
+
+  const segundaLimite = new Date(segundaAtual);
+  segundaLimite.setDate(segundaAtual.getDate() + 7 * PROJETO_MAKER.semanasDeFolga);
+
+  let criadas = 0;
+  const semana = new Date(segundaBusca);
+  while (semana <= segundaLimite) {
+    for (const diaJs of PROJETO_MAKER.diasUteis) {
+      const dt = new Date(semana);
+      dt.setDate(semana.getDate() + (diaJs - 1)); // semana é sempre uma segunda-feira (getDay()===1)
+      const dataISO = toISO(dt);
+      const diaSemana = DIA_JS_MAP[diaJs];
+
+      const doDiaSnap = await db.collection('reservas').where('data', '==', dataISO).get();
+      const doDia = doDiaSnap.docs.map((d) => d.data());
+
+      const batch = db.batch();
+      let houveNovo = false;
+      for (const periodoId of PROJETO_MAKER.periodos) {
+        const jaExiste = doDia.some((r) => r.periodoId === periodoId && r.kit === PROJETO_MAKER.kit);
+        if (jaExiste) continue;
+        const ref = db.collection('reservas').doc();
+        batch.set(ref, {
+          data: dataISO,
+          diaSemana,
+          periodoId,
+          kit: PROJETO_MAKER.kit,
+          local: PROJETO_MAKER.local,
+          professorId: professora.id,
+          professorNome: professora.nome,
+          professorArea: PROJETO_MAKER.area,
+          professorEmail: professora.email,
+          grupoId: `projeto-maker-${dataISO}`,
+          criadoEm: FieldValue.serverTimestamp(),
+        });
+        houveNovo = true;
+        criadas++;
+      }
+      if (houveNovo) await batch.commit();
+    }
+    await controleRef.set({ ultimaSemanaProcessada: toISO(semana) });
+    semana.setDate(semana.getDate() + 7);
+  }
+
+  if (criadas > 0) console.log(`Projeto Maker: ${criadas} reserva(s) criada(s) automaticamente.`);
+  return criadas;
+}
+
+async function buscarProfessorPorEmailAdmin(email) {
+  const snap = await db.collection('professores').where('email', '==', email).limit(1).get();
+  if (snap.empty) return null;
+  const d = snap.docs[0];
+  return { id: d.id, ...d.data() };
+}
+
+function segundaDaSemana(data) {
+  const d = new Date(data);
+  const diaSemana = d.getDay();
+  const diff = diaSemana === 0 ? -6 : 1 - diaSemana;
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+/**
  * Sobrescreve a aba "Semana" da Google Sheet configurada em SHEET_ID com a
  * agenda da semana. Se a planilha ainda não foi compartilhada com a conta de
  * serviço (ou SHEET_ID não foi configurado), só loga um aviso e segue sem
@@ -161,7 +268,7 @@ async function atualizarPlanilha(reservas, inicio, fim) {
     const auth = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
     const sheets = google.sheets({ version: 'v4', auth });
 
-    const linhas = [['Data', 'Dia da semana', 'Horário', 'Kit', 'Local', 'Professor(a)']];
+    const linhas = [['Data', 'Dia da semana', 'Horário', 'Kit', 'Local', 'Professor(a)', 'Componente Curricular']];
     const porData = agruparPor(reservas, (r) => r.data);
     Object.keys(porData)
       .sort()
@@ -179,11 +286,12 @@ async function atualizarPlanilha(reservas, inicio, fim) {
             kit.nome,
             r.local,
             r.professorNome || '',
+            r.professorArea || '',
           ]);
         });
       });
 
-    await sheets.spreadsheets.values.clear({ spreadsheetId: sheetId, range: 'A:F' });
+    await sheets.spreadsheets.values.clear({ spreadsheetId: sheetId, range: 'A:G' });
     await sheets.spreadsheets.values.update({
       spreadsheetId: sheetId,
       range: 'A1',
@@ -282,7 +390,9 @@ function montarCorpoEmail(introducao, itens, linkPlanilha) {
     doDia.forEach((r) => {
       const p = TODOS_PERIODOS[r.periodoId] || {};
       const kit = KITS[r.kit] || { nome: r.kit };
-      texto += `  ${p.inicio || ''}-${p.fim || ''} · ${kit.nome} · ${r.local} · ${r.professorNome || 'professor não identificado'}\n`;
+      const professor = r.professorNome || 'professor não identificado';
+      const componente = r.professorArea ? ` (${r.professorArea})` : '';
+      texto += `  ${p.inicio || ''}-${p.fim || ''} · ${kit.nome} · ${r.local} · ${professor}${componente}\n`;
     });
     texto += '\n';
   });

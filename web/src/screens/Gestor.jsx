@@ -368,7 +368,7 @@ function ProfessoresGestor() {
             <input value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Nome completo" />
           </label>
           <label>
-            Matéria
+            Componente Curricular
             <input value={area} onChange={(e) => setArea(e.target.value)} placeholder="Ex.: Matemática" />
           </label>
           <label>

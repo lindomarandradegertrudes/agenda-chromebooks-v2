@@ -110,7 +110,10 @@ export default function GradeSemana() {
                             <div key={r.id} className={`grade-reserva kit-${r.kit}`}>
                               <span className={`kit-badge kit-${r.kit}`}>{KITS[r.kit]?.nome}</span>
                               <span>{r.local}</span>
-                              <span className="muted">{r.professorNome}</span>
+                              <span className="muted">
+                                {r.professorNome}
+                                {r.professorArea ? ` · ${r.professorArea}` : ''}
+                              </span>
                             </div>
                           ))}
                           {!bloqueio && doPeriodo.length === 0 && <span className="muted">Livre</span>}

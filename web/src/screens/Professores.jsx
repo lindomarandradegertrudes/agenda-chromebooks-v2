@@ -32,7 +32,7 @@ export default function Professores() {
             <thead>
               <tr>
                 <th>Nome</th>
-                <th>Matéria</th>
+                <th>Componente Curricular</th>
                 <th>E-mail</th>
               </tr>
             </thead>
