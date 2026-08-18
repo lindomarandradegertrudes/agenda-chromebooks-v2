@@ -21,11 +21,24 @@ import ConfirmInline from '../components/ConfirmInline';
 
 const KIT_IDS = Object.keys(KITS);
 
-// Abre a janela de agendamento nas DUAS semanas seguintes à próxima
-// sexta-feira que fecha o prazo — depois que essa sexta passa (a partir do
-// sábado), a janela pula pra frente, sempre mantendo duas semanas abertas.
+// Fora da última semana do mês: mantém a janela normal de duas semanas
+// seguintes à próxima sexta-feira que fecha o prazo — depois que essa sexta
+// passa (a partir do sábado), a janela pula pra frente.
+//
+// Na última semana ISO do mês (a semana, de segunda a domingo, que contém o
+// último dia do mês), a agenda do mês seguinte inteiro é liberada, mantendo
+// também o restante do mês corrente disponível até essa liberação.
 function calcularLimites() {
   const hoje = new Date();
+
+  const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
+  const segundaUltimaSemana = segundaDaSemanaDe(ultimoDiaMes);
+
+  if (hoje >= segundaUltimaSemana) {
+    const ultimoDiaProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0);
+    return { min: toISO(hoje), max: toISO(ultimoDiaProxMes) };
+  }
+
   const diaSemana = hoje.getDay(); // 0=Dom .. 6=Sáb
   const passouDaSexta = diaSemana === 0 || diaSemana === 6; // sábado ou domingo
   const segundaAlvo = segundaDaSemanaDe(hoje);
