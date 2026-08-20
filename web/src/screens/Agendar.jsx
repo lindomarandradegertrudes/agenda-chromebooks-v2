@@ -95,6 +95,7 @@ export default function Agendar({ usuario }) {
 
   useEffect(() => {
     setPeriodosSelecionados(new Set());
+    setLocal('');
   }, [kit]);
 
   const carregarMeusAgendamentos = useCallback(
@@ -161,11 +162,11 @@ export default function Agendar({ usuario }) {
       setErro('Escolha uma data.');
       return;
     }
-    const localFinal = kit === 'vermelho' ? KITS.vermelho.restrito : local.trim();
-    if (!localFinal) {
-      setErro('Informe o local (sala/turma).');
+    if (!local.trim()) {
+      setErro(kit === 'vermelho' ? 'Informe a turma.' : 'Informe o local (sala/turma).');
       return;
     }
+    const localFinal = kit === 'vermelho' ? `${KITS.vermelho.restrito} · ${local.trim()}` : local.trim();
     if (periodosSelecionados.size === 0) {
       setErro('Selecione ao menos um período.');
       return;
@@ -266,16 +267,12 @@ export default function Agendar({ usuario }) {
           </label>
 
           <label>
-            Local
-            {kit === 'vermelho' ? (
-              <input value={KITS.vermelho.restrito} disabled />
-            ) : (
-              <input
-                value={local}
-                onChange={(e) => setLocal(e.target.value)}
-                placeholder="Ex.: Sala 12 / Turma 8ºA"
-              />
-            )}
+            {kit === 'vermelho' ? `Turma (${KITS.vermelho.restrito})` : 'Local'}
+            <input
+              value={local}
+              onChange={(e) => setLocal(e.target.value)}
+              placeholder={kit === 'vermelho' ? 'Ex.: 7ºA' : 'Ex.: Sala 12 / Turma 8ºA'}
+            />
           </label>
         </div>
 
