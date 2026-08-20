@@ -147,8 +147,13 @@ label {
 }
 
 .data-com-dia input {
-  flex: 1;
+  flex: 0 1 170px;
   min-width: 0;
+}
+
+.data-com-dia .muted {
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 input,
