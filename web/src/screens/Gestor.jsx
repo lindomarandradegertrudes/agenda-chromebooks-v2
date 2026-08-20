@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { TODOS_PERIODOS, PERIODO_ORDEM, periodosDoDia, toISO, KITS } from '../lib/schedule-config';
+import { TODOS_PERIODOS, PERIODO_ORDEM, periodosDoDia, diaSemanaDe, toISO, KITS } from '../lib/schedule-config';
 import {
   listarReservasDaData,
   cancelarGrupo,
@@ -226,7 +226,10 @@ function AgendarParaProfessor() {
           </label>
           <label>
             Data
-            <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+            <span className="data-com-dia">
+              <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+              {diaSemana && <span className="muted">{diaSemana}</span>}
+            </span>
           </label>
         </div>
 
@@ -444,7 +447,10 @@ function GerenciarReservas() {
       <h3>Gerenciar reservas</h3>
       <label>
         Data
-        <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+        <span className="data-com-dia">
+          <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+          {data && <span className="muted">{diaSemanaDe(data)}</span>}
+        </span>
       </label>
 
       {carregando ? (
@@ -548,7 +554,10 @@ function BloquearPeriodo() {
       <form className="form" onSubmit={handleSubmit}>
         <label>
           Data
-          <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+          <span className="data-com-dia">
+            <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+            {data && <span className="muted">{diaSemanaDe(data)}</span>}
+          </span>
         </label>
 
         <div className="periodos-grid">

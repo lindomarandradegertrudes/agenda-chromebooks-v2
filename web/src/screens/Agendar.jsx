@@ -241,7 +241,10 @@ export default function Agendar({ usuario }) {
         <div className="form-row">
           <label>
             Data
-            <input type="date" min={min} max={max} value={data} onChange={(e) => setData(e.target.value)} />
+            <span className="data-com-dia">
+              <input type="date" min={min} max={max} value={data} onChange={(e) => setData(e.target.value)} />
+              {diaSemana && <span className="muted">{diaSemana}</span>}
+            </span>
           </label>
         </div>
 

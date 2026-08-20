@@ -139,6 +139,18 @@ label {
   color: var(--cor-muted);
 }
 
+.data-com-dia {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.data-com-dia input {
+  flex: 1;
+  min-width: 0;
+}
+
 input,
 select,
 textarea {
