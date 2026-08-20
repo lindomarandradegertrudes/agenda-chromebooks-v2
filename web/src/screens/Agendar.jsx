@@ -16,7 +16,7 @@ import {
   buscarProfessorPorEmail,
   criarProfessor,
 } from '../lib/firestore-api';
-import { fmtDataBR } from '../lib/format';
+import { fmtDataBR, diaSemanaCompleto } from '../lib/format';
 import ConfirmInline from '../components/ConfirmInline';
 
 const KIT_IDS = Object.keys(KITS);
@@ -243,7 +243,7 @@ export default function Agendar({ usuario }) {
             Data
             <span className="data-com-dia">
               <input type="date" min={min} max={max} value={data} onChange={(e) => setData(e.target.value)} />
-              {diaSemana && <span className="muted">{diaSemana}</span>}
+              {diaSemana && <span className="muted">{diaSemanaCompleto(diaSemana)}</span>}
             </span>
           </label>
         </div>
@@ -282,7 +282,7 @@ export default function Agendar({ usuario }) {
         {data ? (
           <div className="periodos-picker">
             <p className="field-label">
-              Períodos — {diaSemana}, {fmtDataBR(data)}
+              Períodos — {diaSemanaCompleto(diaSemana)}, {fmtDataBR(data)}
             </p>
             {carregandoDia ? (
               <p className="muted">Carregando…</p>
@@ -340,7 +340,7 @@ export default function Agendar({ usuario }) {
                 <li key={grupoId} className="agendamento-item">
                   <div>
                     <strong>
-                      {primeiro.diaSemana}, {fmtDataBR(primeiro.data)}
+                      {diaSemanaCompleto(primeiro.diaSemana)}, {fmtDataBR(primeiro.data)}
                     </strong>
                     <span className={`kit-badge kit-${primeiro.kit}`}>{KITS[primeiro.kit]?.nome}</span>
                     <span className="muted"> · {primeiro.local}</span>

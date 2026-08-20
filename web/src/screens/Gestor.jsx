@@ -16,7 +16,7 @@ import {
 } from '../lib/firestore-api';
 import { auth } from '../lib/firebase';
 import { autenticarGestor } from '../lib/auth';
-import { fmtDataBR } from '../lib/format';
+import { fmtDataBR, diaSemanaCompleto } from '../lib/format';
 import ConfirmInline from '../components/ConfirmInline';
 
 export default function Gestor() {
@@ -228,7 +228,7 @@ function AgendarParaProfessor() {
             Data
             <span className="data-com-dia">
               <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
-              {diaSemana && <span className="muted">{diaSemana}</span>}
+              {diaSemana && <span className="muted">{diaSemanaCompleto(diaSemana)}</span>}
             </span>
           </label>
         </div>
@@ -266,7 +266,7 @@ function AgendarParaProfessor() {
         {data ? (
           <div className="periodos-picker">
             <p className="field-label">
-              Períodos — {diaSemana}, {fmtDataBR(data)}
+              Períodos — {diaSemanaCompleto(diaSemana)}, {fmtDataBR(data)}
             </p>
             {carregandoDia ? (
               <p className="muted">Carregando…</p>
@@ -449,7 +449,7 @@ function GerenciarReservas() {
         Data
         <span className="data-com-dia">
           <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
-          {data && <span className="muted">{diaSemanaDe(data)}</span>}
+          {data && <span className="muted">{diaSemanaCompleto(diaSemanaDe(data))}</span>}
         </span>
       </label>
 
@@ -556,7 +556,7 @@ function BloquearPeriodo() {
           Data
           <span className="data-com-dia">
             <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
-            {data && <span className="muted">{diaSemanaDe(data)}</span>}
+            {data && <span className="muted">{diaSemanaCompleto(diaSemanaDe(data))}</span>}
           </span>
         </label>
 
