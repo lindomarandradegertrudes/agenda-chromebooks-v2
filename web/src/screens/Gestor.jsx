@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { onAuthStateChanged } from 'firebase/auth';
-import { TODOS_PERIODOS, PERIODO_ORDEM, periodosDoDia, diaSemanaDe, toISO, KITS } from '../lib/schedule-config';
+import { TODOS_PERIODOS, PERIODO_ORDEM, periodosDoDia, diaSemanaDe, toISO, KITS, turnoDoPeriodo } from '../lib/schedule-config';
 import {
   listarReservasDaData,
   cancelarGrupo,
@@ -467,7 +467,7 @@ function GerenciarReservas() {
                   <div className="periodo-tags">
                     {itens.map((i) => (
                       <span key={i.id} className="periodo-tag">
-                        {TODOS_PERIODOS[i.periodoId]?.label}
+                        {TODOS_PERIODOS[i.periodoId]?.label} ({turnoDoPeriodo(i.periodoId)})
                       </span>
                     ))}
                   </div>
@@ -602,7 +602,7 @@ function BloquearPeriodo() {
                 <div className="periodo-tags">
                   {b.periodos.map((id) => (
                     <span key={id} className="periodo-tag">
-                      {TODOS_PERIODOS[id]?.label}
+                      {TODOS_PERIODOS[id]?.label} ({turnoDoPeriodo(id)})
                     </span>
                   ))}
                 </div>

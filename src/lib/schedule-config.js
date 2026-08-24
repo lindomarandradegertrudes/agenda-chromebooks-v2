@@ -54,6 +54,12 @@ export function diaSemanaDe(dataStr) {
   return DIA_JS_MAP[dt.getDay()] || null;
 }
 
+// M1..M5 são de manhã, T1..T5 de tarde — os dois turnos usam os mesmos
+// rótulos ("1ª aula".."5ª aula"), então isso ajuda a diferenciar na exibição.
+export function turnoDoPeriodo(periodoId) {
+  return periodoId?.startsWith('M') ? 'manhã' : 'tarde';
+}
+
 export function periodosDoDia(dataStr) {
   const dia = diaSemanaDe(dataStr);
   if (!dia) return { dia: null, ids: [] };

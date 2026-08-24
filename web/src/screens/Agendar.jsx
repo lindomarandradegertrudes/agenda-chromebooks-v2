@@ -6,6 +6,7 @@ import {
   periodosDoDia,
   segundaDaSemanaDe,
   toISO,
+  turnoDoPeriodo,
 } from '../lib/schedule-config';
 import {
   listarReservasDaData,
@@ -31,10 +32,11 @@ const KIT_IDS = Object.keys(KITS);
 function calcularLimites() {
   const hoje = new Date();
 
-  const ultimoDiaMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-  const segundaUltimaSemana = segundaDaSemanaDe(ultimoDiaMes);
+  const primeiroDiaProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
+  const gatilhoProxMes = new Date(primeiroDiaProxMes);
+  gatilhoProxMes.setDate(gatilhoProxMes.getDate() - 8);
 
-  if (hoje >= segundaUltimaSemana) {
+  if (hoje >= gatilhoProxMes) {
     const ultimoDiaProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0);
     return { min: toISO(hoje), max: toISO(ultimoDiaProxMes) };
   }
@@ -344,7 +346,7 @@ export default function Agendar({ usuario }) {
                     <div className="periodo-tags">
                       {itens.map((i) => (
                         <span key={i.id} className="periodo-tag">
-                          {TODOS_PERIODOS[i.periodoId]?.label}
+                          {TODOS_PERIODOS[i.periodoId]?.label} ({turnoDoPeriodo(i.periodoId)})
                         </span>
                       ))}
                     </div>
