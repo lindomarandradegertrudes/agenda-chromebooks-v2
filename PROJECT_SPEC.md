@@ -2,6 +2,13 @@
 
 Escola Agrícola Municipal Carlos Heins Funke — Joinville/SC
 
+> **Nota:** este documento é o plano original que guiou a primeira versão do
+> app. O projeto já está em produção e evoluiu bastante desde então — para o
+> retrato atualizado de funcionalidades, autenticação e segurança, ver o
+> [README.md](README.md). O que segue abaixo foi atualizado nos pontos que
+> mudaram de rumo (autenticação, janela de agendamento, Grade da semana,
+> Projeto Maker), mas mantém o objetivo original como registro histórico.
+
 ## Objetivo
 
 Reconstruir o app de agendamento de Chromebooks (hoje um artefato HTML dentro do Claude) como um site de verdade, publicado, com banco de dados real (Firestore) e envio de e-mail **totalmente automático** toda sexta-feira ao meio-dia — sem nenhum passo manual, ao contrário da versão "planilha Google" que veio antes desta.
@@ -13,7 +20,7 @@ Este diretório já contém pronto:
 - `functions/index.js` — a Cloud Function agendada que envia os e-mails (completa, só falta configurar os secrets e fazer deploy).
 - `functions/package.json`, `firebase.json`, `firestore.rules` — configuração do Firebase.
 
-**O que falta fazer:** o frontend React (as telas) e o deploy. Este documento descreve exatamente o que construir.
+**Status:** o frontend React (`web/`) e o deploy já foram concluídos e o site está em produção — ver o [README.md](README.md) para o estado atual. Este documento descreve o plano original que guiou essa construção.
 
 ---
 
@@ -85,27 +92,36 @@ Coleções no nível raiz (sem sub-coleções, sem particionar por mês — o Fi
 
 Portar exatamente o comportamento já validado no protótipo HTML (peça para ver o artefato anterior se precisar conferir algum detalhe visual/de fluxo). Resumo funcional de cada uma:
 
-### 1. Agendar
-- Campo de data com `min`/`max` limitando à semana atual + próxima (segunda a sexta), usando `segundaDaSemanaDe`/`toISO` de `schedule-config.js`.
-- Seletor de professor (carregado de `professores`).
-- Seleção de kit (vermelho = local fixo "Sala Maker"; azul/amarelo = campo de local livre).
-- Lista de períodos do dia selecionado (via `periodosDoDia`), com status livre/já reservado/bloqueado (consultando `reservas` e `bloqueios` da data).
-- Ao confirmar, cria N documentos em `reservas` (um por período marcado), todos com o mesmo `grupoId` (gerar um id novo por submissão).
-- Seção "Meus agendamentos": ao escolher o professor, listar as reservas dele(a) da semana atual em diante, agrupadas por `grupoId`, com botão de cancelar (confirmação inline, sem `confirm()` do navegador — isso já causou bug no artefato antigo por rodar num iframe restrito; aqui num site normal não teria esse problema, mas o padrão de confirmação inline continua sendo melhor UX).
+### 1. Agendar *(implementação final — evoluiu bastante do plano original)*
+- O professor(a) não escolhe mais quem está agendando: a identidade vem do login Google (`usuario.email`), com cadastro de nome/Componente Curricular só no primeiro acesso (`CompletarCadastro`).
+- Campo de data mostra o dia da semana completo ao lado (ex.: "Segunda-feira"), via `diaSemanaCompleto` em `lib/format.js`.
+- Janela de agendamento (`calcularLimites` em `Agendar.jsx`): rolante de duas semanas à frente, sempre fechando na sexta-feira anterior à semana em questão; **além disso**, o mês seguinte inteiro é liberado assim que faltarem 8 dias para ele começar (gatilho fixo, não depende mais de "última segunda-feira do mês").
+- Seleção de kit (🔴 vermelho = restrito à "Sala Maker", com campo de turma digitável; 🔵 azul / 🟡 amarelo = campo de local livre).
+- Lista de períodos do dia selecionado (via `periodosDoDia`), **separada em dois blocos — Matutino e Vespertino** — com status livre/reservado/bloqueado indicado tanto pelo texto quanto pela cor de fundo do card (verde esmaecido = livre, vermelho esmaecido = ocupado).
+- Ao confirmar, cria N documentos em `reservas` (um por período marcado), todos com o mesmo `grupoId`.
+- Seção "Meus agendamentos": lista as reservas do professor logado da data atual em diante, agrupadas por `grupoId`, mostrando o turno (manhã/tarde) ao lado do rótulo do período, com botão de cancelar (confirmação inline).
 
-### 2. Grade da semana
-- Escolher uma data qualquer; mostrar a grade Segunda–Sexta daquela semana (calcular a segunda via `segundaDaSemanaDe`).
-- Uma célula por período × dia, mostrando reservas (kit + local + professor) ou bloqueios.
+### 2. Grade da semana *(implementação final)*
+- Escolher uma data qualquer; mostrar a semana Segunda–Sexta daquela data (via `segundaDaSemanaDe`).
+- **Uma tabela separada por kit** (Vermelho, Azul, Amarelo), empilhadas em cascata — não mais uma tabela única com os três kits misturados na mesma célula.
+- Células com fundo verde esmaecido (livre) ou vermelho esmaecido (reserva ou bloqueio); reservas do Projeto Maker (ver seção própria abaixo) usam um vermelho ainda mais forte para se diferenciar das reservas comuns.
+- Linha divisória espessa entre a última aula da manhã e a primeira da tarde; colunas de Segunda a Sexta com largura fixa e igual (`table-layout: fixed` + `colgroup`).
 
 ### 3. Professores
-- Cadastro (nome, matéria, e-mail opcional) e listagem.
+- Cadastro (nome, **Componente Curricular** — renomeado do antigo "Matéria" —, e-mail) e listagem; cadastro/remoção manual também disponível na área do gestor.
 
 ### 4. Área do gestor
-- Um gate simples de acesso (pode manter um código fixo como no protótipo, ou evoluir para Firebase Auth — ver seção de segurança abaixo).
-- **Gerenciar reservas:** ver/cancelar qualquer reserva de qualquer data, útil para limpar testes ou reservas feitas por engano.
+- Autenticação de verdade via **Google Sign-In** restrito ao domínio `@edu.joinville.sc.gov.br` (ver seção de Segurança, atualizada abaixo) — não é mais um código fixo de acesso geral. Um segundo código, validado no servidor via Cloud Function `autenticarGestor`, libera as ações administrativas.
+- **Agendar para professor(a):** sem restrição de janela de data, atribuindo a qualquer professor cadastrado.
+- **Gerenciar reservas:** ver/cancelar qualquer reserva de qualquer data.
 - **Bloquear período:** bloquear todos os 3 kits num conjunto de períodos de uma data, com motivo obrigatório.
-- **Gestores:** cadastro de múltiplos gestores (nome + e-mail) — é isso que a Cloud Function usa para saber a quem mandar o resumo completo.
-- **Não é mais necessário** o card de "exportar para planilha" nem os botões de `mailto:` da versão anterior — o envio agora é automático via Cloud Function.
+- **Professores:** cadastrar e também **excluir** registros de professores.
+- **Gestores:** cadastro de múltiplos gestores (nome + e-mail).
+- **Não é mais necessário** o card de "exportar para planilha" nem os botões de `mailto:` da versão anterior — o envio agora é automático via Cloud Function, incluindo a atualização de uma Google Sheet real.
+
+### 5. Projeto Maker *(recurso novo, não previsto no plano original)*
+- Reserva recorrente e permanente do Kit Vermelho (Sala Maker), segunda a quinta, 5ª aula da manhã + 1ª aula da tarde, atribuída a Ana Lúcia Steinbach.
+- Mantida automaticamente pela Cloud Function `garantirReservasProjetoMaker()` (chamada a cada execução de `enviarResumoSemanal`), gerando reservas reais e canceláveis com um buffer rolante de 6 semanas à frente. Um doc de controle (`config/projetoMakerHorizonte`) garante que um dia cancelado manualmente nunca seja recriado.
 
 ---
 
@@ -141,16 +157,17 @@ Se preferir não usar Gmail, trocar o bloco `nodemailer.createTransport({...})` 
 3. `firebase functions:secrets:set EMAIL_USER` e `EMAIL_PASS` (ver acima).
 4. `firebase deploy --only firestore:rules,functions`
 5. Testar: abrir a URL da função `testarEnvioAgora` no navegador (aparece no terminal após o deploy) e conferir se o e-mail chega.
-6. Criar o frontend React (`npm create vite@latest` dentro de uma pasta `web/`, ou na raiz — como preferir organizar), instalar o SDK do Firebase (`firebase` no npm) e implementar as telas da seção acima, usando as credenciais do projeto Firebase (Configurações do projeto → Seus apps → Web).
-7. `vercel deploy` a partir da pasta do frontend, do mesmo jeito que foi feito com o `bathroom-control`.
+6. ~~Criar o frontend React...~~ — feito, vive em `web/`. Para rodar/deployar de novo, ver "Rodando localmente" e "Deploy" no [README.md](README.md).
+7. ~~`vercel deploy`...~~ — feito; o site está publicado em `agenda-chromebooks.vercel.app`. Deploys seguintes: `vercel --prod` a partir da raiz do repo + `vercel alias set` (ver README para o porquê do passo extra).
 
 ---
 
-## Segurança — nota importante
+## Segurança *(implementada — diferente do plano original abaixo)*
 
-As `firestore.rules` deste pacote estão **abertas** (qualquer um com o link do site consegue ler e escrever), igual ao nível de proteção do protótipo (só um código simples travando a área do gestor). Isso é aceitável para uma ferramenta interna pequena, mas como vai virar um site público de verdade (não mais um artefato fechado dentro do Claude), vale considerar reforçar antes ou logo depois do lançamento:
+O plano original previa deixar as `firestore.rules` abertas no primeiro deploy e reforçar depois. Na prática, a hardening aconteceu em etapas (código geral → código + Firebase Auth por custom token → **Google Sign-In**) até chegar ao modelo atual, descrito em detalhe no [README.md](README.md#segurança):
 
-- **Opção simples:** adicionar Firebase Authentication com login Google restrito ao domínio `@joinville.sc.gov.br` (ou equivalente), e trocar as regras para exigir `request.auth != null`.
-- **Opção mínima:** pelo menos proteger a coleção `gestores` e a capacidad de bloquear/cancelar reservas de terceiros atrás de autenticação, deixando `reservas` (criar) e `professores` (ler) mais abertos, já que são ações que professores comuns precisam fazer o tempo todo.
+- Login obrigatório em todo o site via Google Sign-In, restrito a contas `@edu.joinville.sc.gov.br` (`request.auth.token.email` checado nas `firestore.rules`).
+- `gestores` e `bloqueios` exigem além disso a claim `gestor: true`.
+- `reservas` e `professores` exigem que o e-mail do documento bata com quem está logado (`ehDono()`), impedindo agendar em nome de outra pessoa — esse era justamente o problema que motivou a evolução da "opção mínima" original para a solução completa com Google Sign-In.
 
-Isso não precisa ser resolvido antes do primeiro deploy de teste, mas não é recomendável deixar o site em produção, de acesso público, sem nenhuma dessas proteções por muito tempo.
+Ver o README para os detalhes de configuração (proxy de `/__/auth/*` no Vercel, domínio autorizado no Google Cloud Console etc.), que não faziam parte do escopo original deste documento.
