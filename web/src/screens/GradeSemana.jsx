@@ -7,9 +7,12 @@ import {
   GRADE_SEMANA,
   segundaDaSemanaDe,
   toISO,
+  turnoDoPeriodo,
 } from '../lib/schedule-config';
 import { listarReservasNoIntervalo, listarBloqueiosNoIntervalo } from '../lib/firestore-api';
 import { fmtDataBR } from '../lib/format';
+
+const KIT_IDS = Object.keys(KITS);
 
 function diaTemPeriodo(dia, periodoId) {
   const g = GRADE_SEMANA[dia];
@@ -44,9 +47,9 @@ export default function GradeSemana() {
       .finally(() => setCarregando(false));
   }, [dias]);
 
-  function itensDaCelula(data, periodoId) {
+  function itensDaCelula(data, periodoId, kitId) {
     const bloqueio = bloqueios.find((b) => b.data === data && b.periodos?.includes(periodoId));
-    const doPeriodo = reservas.filter((r) => r.data === data && r.periodoId === periodoId);
+    const doPeriodo = reservas.filter((r) => r.data === data && r.periodoId === periodoId && r.kit === kitId);
     return { bloqueio, reservas: doPeriodo };
   }
 
@@ -61,72 +64,79 @@ export default function GradeSemana() {
         </label>
       </div>
 
-      <div className="card grade-wrap">
-        {carregando ? (
-          <p className="muted">Carregando…</p>
-        ) : (
-          <table className="grade-table">
-            <thead>
-              <tr>
-                <th>Período</th>
-                {dias.map((d) => (
-                  <th key={d.data}>
-                    {d.nome}
-                    <br />
-                    <span className="muted">{fmtDataBR(d.data)}</span>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {PERIODO_ORDEM.map((periodoId) => {
-                const p = TODOS_PERIODOS[periodoId];
-                return (
-                  <tr key={periodoId}>
-                    <th className="grade-row-label">
-                      {p.label}
-                      <br />
-                      <span className="muted">
-                        {p.inicio}–{p.fim}
-                      </span>
-                    </th>
-                    {dias.map((d) => {
-                      if (!diaTemPeriodo(d.nome, periodoId)) {
-                        return (
-                          <td key={d.data} className="grade-cell nao-letivo">
-                            —
-                          </td>
-                        );
-                      }
-                      const { bloqueio, reservas: doPeriodo } = itensDaCelula(d.data, periodoId);
-                      return (
-                        <td key={d.data} className="grade-cell">
-                          {bloqueio && (
-                            <div className="grade-bloqueio" title={bloqueio.motivo}>
-                              Bloqueado — {bloqueio.motivo}
-                            </div>
-                          )}
-                          {doPeriodo.map((r) => (
-                            <div key={r.id} className={`grade-reserva kit-${r.kit}`}>
-                              <span className={`kit-badge kit-${r.kit}`}>{KITS[r.kit]?.nome}</span>
-                              <span>{r.local}</span>
-                              <span className="muted">
-                                {r.professorNome}
-                                {r.professorArea ? ` · ${r.professorArea}` : ''}
-                              </span>
-                            </div>
-                          ))}
-                          {!bloqueio && doPeriodo.length === 0 && <span className="muted">Livre</span>}
-                        </td>
-                      );
-                    })}
+      {carregando ? (
+        <p className="muted">Carregando…</p>
+      ) : (
+        KIT_IDS.map((kitId) => (
+          <div key={kitId} className="kit-secao">
+            <div className="kit-cabecalho">
+              <span className={`kit-badge kit-${kitId}`}>{KITS[kitId].nome}</span>
+              {KITS[kitId].restrito && <span className="muted">restrito à {KITS[kitId].restrito}</span>}
+            </div>
+            <div className={`card grade-wrap kit-borda-${kitId}`}>
+              <table className="grade-table">
+                <thead>
+                  <tr>
+                    <th>Período</th>
+                    {dias.map((d) => (
+                      <th key={d.data}>
+                        {d.nome}
+                        <br />
+                        <span className="muted">{fmtDataBR(d.data)}</span>
+                      </th>
+                    ))}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </div>
+                </thead>
+                <tbody>
+                  {PERIODO_ORDEM.map((periodoId) => {
+                    const p = TODOS_PERIODOS[periodoId];
+                    return (
+                      <tr key={periodoId}>
+                        <th className="grade-row-label">
+                          {p.label} ({turnoDoPeriodo(periodoId)})
+                          <br />
+                          <span className="muted">
+                            {p.inicio}–{p.fim}
+                          </span>
+                        </th>
+                        {dias.map((d) => {
+                          if (!diaTemPeriodo(d.nome, periodoId)) {
+                            return (
+                              <td key={d.data} className="grade-cell nao-letivo">
+                                —
+                              </td>
+                            );
+                          }
+                          const { bloqueio, reservas: doPeriodo } = itensDaCelula(d.data, periodoId, kitId);
+                          return (
+                            <td key={d.data} className="grade-cell">
+                              {bloqueio && (
+                                <div className="grade-bloqueio" title={bloqueio.motivo}>
+                                  Bloqueado — {bloqueio.motivo}
+                                </div>
+                              )}
+                              {doPeriodo.map((r) => (
+                                <div key={r.id} className="grade-reserva">
+                                  <span className="grade-reserva-local">{r.local}</span>
+                                  <span className="muted">
+                                    {r.professorNome}
+                                    {r.professorArea ? ` · ${r.professorArea}` : ''}
+                                  </span>
+                                </div>
+                              ))}
+                              {!bloqueio && doPeriodo.length === 0 && <span className="muted">Livre</span>}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ))
+      )}
     </section>
   );
 }

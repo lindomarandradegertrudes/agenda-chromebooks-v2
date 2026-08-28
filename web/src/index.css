@@ -468,6 +468,38 @@ input:disabled {
   max-width: 320px;
 }
 
+.kit-secao {
+  margin-bottom: 24px;
+}
+
+.kit-secao:last-child {
+  margin-bottom: 0;
+}
+
+.kit-cabecalho {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.kit-borda-vermelho {
+  border-left: 4px solid var(--kit-vermelho);
+}
+
+.kit-borda-azul {
+  border-left: 4px solid var(--kit-azul);
+}
+
+.kit-borda-amarelo {
+  border-left: 4px solid var(--kit-amarelo);
+}
+
+.grade-reserva-local {
+  font-weight: 600;
+}
+
 @media (max-width: 640px) {
   .app-header h1 {
     font-size: 1.25rem;
