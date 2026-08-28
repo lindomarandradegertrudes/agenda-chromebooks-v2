@@ -472,6 +472,11 @@ input:disabled {
   text-align: center;
 }
 
+.linha-divisor-turno th,
+.linha-divisor-turno td {
+  border-top: 3px solid var(--cor-primaria);
+}
+
 .grade-row-label {
   background: var(--cor-fundo);
   text-align: left;

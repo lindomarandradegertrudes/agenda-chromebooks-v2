@@ -97,7 +97,7 @@ export default function GradeSemana() {
                   {PERIODO_ORDEM.map((periodoId) => {
                     const p = TODOS_PERIODOS[periodoId];
                     return (
-                      <tr key={periodoId}>
+                      <tr key={periodoId} className={periodoId === 'T1' ? 'linha-divisor-turno' : ''}>
                         <th className="grade-row-label">
                           {p.label} ({turnoDoPeriodo(periodoId)})
                           <br />
