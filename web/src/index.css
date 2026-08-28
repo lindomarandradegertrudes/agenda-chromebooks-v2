@@ -520,6 +520,15 @@ input:disabled {
   color: color-mix(in srgb, var(--texto-ocupado) 65%, var(--cor-muted));
 }
 
+.grade-cell.projeto-maker {
+  background: color-mix(in srgb, var(--kit-vermelho) 55%, var(--cor-card));
+}
+
+.grade-cell.projeto-maker .grade-reserva-local,
+.grade-cell.projeto-maker .muted {
+  color: color-mix(in srgb, var(--kit-vermelho) 85%, black);
+}
+
 .grade-bloqueio {
   background: color-mix(in srgb, var(--cor-perigo) 12%, white);
   color: var(--cor-perigo);

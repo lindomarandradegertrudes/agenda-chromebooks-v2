@@ -115,8 +115,12 @@ export default function GradeSemana() {
                           }
                           const { bloqueio, reservas: doPeriodo } = itensDaCelula(d.data, periodoId, kitId);
                           const ocupado = Boolean(bloqueio) || doPeriodo.length > 0;
+                          const ehProjetoMaker = doPeriodo.some((r) => r.professorArea === 'Projeto Maker');
                           return (
-                            <td key={d.data} className={`grade-cell ${ocupado ? 'ocupado' : 'livre'}`}>
+                            <td
+                              key={d.data}
+                              className={`grade-cell ${ocupado ? 'ocupado' : 'livre'}${ehProjetoMaker ? ' projeto-maker' : ''}`}
+                            >
                               {bloqueio && (
                                 <div className="grade-bloqueio" title={bloqueio.motivo}>
                                   Bloqueado — {bloqueio.motivo}
