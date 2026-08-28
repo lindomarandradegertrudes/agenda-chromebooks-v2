@@ -346,10 +346,24 @@ input:disabled {
   text-align: left;
 }
 
+.periodo-chip.status-livre {
+  background: var(--fundo-livre);
+}
+
+.periodo-chip.status-livre .periodo-status {
+  color: var(--texto-livre);
+}
+
 .periodo-chip.status-reservado,
 .periodo-chip.status-bloqueado {
   cursor: not-allowed;
-  opacity: 0.55;
+  opacity: 0.75;
+  background: var(--fundo-ocupado);
+}
+
+.periodo-chip.status-reservado .periodo-status,
+.periodo-chip.status-bloqueado .periodo-status {
+  color: var(--texto-ocupado);
 }
 
 .periodo-chip.selected {
