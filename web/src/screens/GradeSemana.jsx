@@ -75,6 +75,12 @@ export default function GradeSemana() {
             </div>
             <div className={`card grade-wrap kit-borda-${kitId}`}>
               <table className="grade-table">
+                <colgroup>
+                  <col className="col-periodo" />
+                  {dias.map((d) => (
+                    <col key={d.data} className="col-dia" />
+                  ))}
+                </colgroup>
                 <thead>
                   <tr>
                     <th>Período</th>

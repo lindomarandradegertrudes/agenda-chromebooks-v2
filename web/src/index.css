@@ -416,6 +416,15 @@ input:disabled {
   width: 100%;
   border-collapse: collapse;
   min-width: 720px;
+  table-layout: fixed;
+}
+
+.grade-table .col-periodo {
+  width: 140px;
+}
+
+.grade-table .col-dia {
+  width: calc((100% - 140px) / 5);
 }
 
 .grade-table th,
@@ -424,6 +433,7 @@ input:disabled {
   padding: 8px 10px;
   font-size: 0.85rem;
   vertical-align: top;
+  overflow-wrap: break-word;
 }
 
 .grade-table thead th {
@@ -434,12 +444,8 @@ input:disabled {
 .grade-row-label {
   background: var(--cor-fundo);
   text-align: left;
-  white-space: nowrap;
 }
 
-.grade-cell {
-  min-width: 140px;
-}
 
 .grade-cell.nao-letivo {
   background: repeating-linear-gradient(45deg, #f7f8f9, #f7f8f9 6px, #eef0f2 6px, #eef0f2 12px);
