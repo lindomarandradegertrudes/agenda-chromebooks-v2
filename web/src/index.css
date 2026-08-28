@@ -474,7 +474,7 @@ input:disabled {
 
 .linha-divisor-turno th,
 .linha-divisor-turno td {
-  border-top: 3px solid var(--cor-primaria);
+  border-top: 5px solid var(--cor-borda);
 }
 
 .grade-row-label {
