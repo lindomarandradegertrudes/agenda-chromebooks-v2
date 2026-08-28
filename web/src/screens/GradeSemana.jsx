@@ -108,8 +108,9 @@ export default function GradeSemana() {
                             );
                           }
                           const { bloqueio, reservas: doPeriodo } = itensDaCelula(d.data, periodoId, kitId);
+                          const ocupado = Boolean(bloqueio) || doPeriodo.length > 0;
                           return (
-                            <td key={d.data} className="grade-cell">
+                            <td key={d.data} className={`grade-cell ${ocupado ? 'ocupado' : 'livre'}`}>
                               {bloqueio && (
                                 <div className="grade-bloqueio" title={bloqueio.motivo}>
                                   Bloqueado — {bloqueio.motivo}

@@ -13,6 +13,11 @@
   --kit-azul: #2c5c8a;
   --kit-amarelo: #b8860b;
 
+  --fundo-ocupado: color-mix(in srgb, var(--kit-vermelho) 12%, var(--cor-card));
+  --texto-ocupado: color-mix(in srgb, var(--kit-vermelho) 75%, var(--cor-texto));
+  --fundo-livre: color-mix(in srgb, var(--cor-sucesso) 10%, var(--cor-card));
+  --texto-livre: color-mix(in srgb, var(--cor-sucesso) 65%, var(--cor-texto));
+
   color-scheme: light;
 }
 
@@ -453,6 +458,24 @@ input:disabled {
 
 .grade-reserva:last-child {
   border-bottom: none;
+}
+
+.grade-cell.livre {
+  background: var(--fundo-livre);
+  color: var(--texto-livre);
+  font-weight: 500;
+}
+
+.grade-cell.ocupado {
+  background: var(--fundo-ocupado);
+}
+
+.grade-cell.ocupado .grade-reserva-local {
+  color: var(--texto-ocupado);
+}
+
+.grade-cell.ocupado .muted {
+  color: color-mix(in srgb, var(--texto-ocupado) 65%, var(--cor-muted));
 }
 
 .grade-bloqueio {
