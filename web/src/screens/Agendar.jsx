@@ -286,31 +286,42 @@ export default function Agendar({ usuario }) {
             {carregandoDia ? (
               <p className="muted">Carregando…</p>
             ) : (
-              <div className="periodos-grid">
-                {periodosDoDiaIds.map((id) => {
-                  const p = TODOS_PERIODOS[id];
-                  const status = statusDoPeriodo(id);
-                  const selecionado = periodosSelecionados.has(id);
-                  return (
-                    <button
-                      key={id}
-                      type="button"
-                      className={`periodo-chip status-${status}${selecionado ? ' selected' : ''}`}
-                      disabled={status !== 'livre'}
-                      onClick={() => togglePeriodo(id)}
-                      title={status === 'bloqueado' ? 'Período bloqueado' : status === 'reservado' ? 'Já reservado' : ''}
-                    >
-                      <span className="periodo-label">{p.label}</span>
-                      <span className="periodo-horario">
-                        {p.inicio}–{p.fim}
-                      </span>
-                      <span className="periodo-status">
-                        {status === 'livre' ? 'Livre' : status === 'reservado' ? 'Reservado' : 'Bloqueado'}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              ['manhã', 'tarde'].map((turno) => {
+                const idsDoTurno = periodosDoDiaIds.filter((id) => turnoDoPeriodo(id) === turno);
+                if (idsDoTurno.length === 0) return null;
+                return (
+                  <div key={turno} className="periodos-turno">
+                    <p className="periodos-turno-titulo">{turno === 'manhã' ? 'Matutino' : 'Vespertino'}</p>
+                    <div className="periodos-grid">
+                      {idsDoTurno.map((id) => {
+                        const p = TODOS_PERIODOS[id];
+                        const status = statusDoPeriodo(id);
+                        const selecionado = periodosSelecionados.has(id);
+                        return (
+                          <button
+                            key={id}
+                            type="button"
+                            className={`periodo-chip status-${status}${selecionado ? ' selected' : ''}`}
+                            disabled={status !== 'livre'}
+                            onClick={() => togglePeriodo(id)}
+                            title={
+                              status === 'bloqueado' ? 'Período bloqueado' : status === 'reservado' ? 'Já reservado' : ''
+                            }
+                          >
+                            <span className="periodo-label">{p.label}</span>
+                            <span className="periodo-horario">
+                              {p.inicio}–{p.fim}
+                            </span>
+                            <span className="periodo-status">
+                              {status === 'livre' ? 'Livre' : status === 'reservado' ? 'Reservado' : 'Bloqueado'}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })
             )}
           </div>
         ) : (

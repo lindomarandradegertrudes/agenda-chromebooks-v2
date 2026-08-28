@@ -327,6 +327,23 @@ input:disabled {
   margin-top: 4px;
 }
 
+.periodos-turno {
+  margin-bottom: 16px;
+}
+
+.periodos-turno:last-child {
+  margin-bottom: 0;
+}
+
+.periodos-turno-titulo {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--cor-muted);
+  margin: 0 0 8px;
+}
+
 .periodos-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
