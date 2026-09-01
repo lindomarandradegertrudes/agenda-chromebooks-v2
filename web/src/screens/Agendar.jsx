@@ -17,7 +17,7 @@ import {
   buscarProfessorPorEmail,
   criarProfessor,
 } from '../lib/firestore-api';
-import { fmtDataBR, diaSemanaCompleto } from '../lib/format';
+import { fmtDataBR, diaSemanaCompleto, toISODate } from '../lib/format';
 import ConfirmInline from '../components/ConfirmInline';
 
 const KIT_IDS = Object.keys(KITS);
@@ -36,9 +36,16 @@ function calcularLimites() {
   const gatilhoProxMes = new Date(primeiroDiaProxMes);
   gatilhoProxMes.setDate(gatilhoProxMes.getDate() - 8);
 
+  // Professor(a) nunca agenda para a semana corrente (o prazo é sempre a
+  // sexta-feira que antecede a semana em questão — quando essa sexta já
+  // passou, a semana toda fica fora do alcance). O piso de qualquer janela
+  // é, portanto, a segunda-feira da próxima semana.
+  const proximaSegunda = segundaDaSemanaDe(hoje);
+  proximaSegunda.setDate(proximaSegunda.getDate() + 7);
+
   if (hoje >= gatilhoProxMes) {
     const ultimoDiaProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0);
-    return { min: toISO(hoje), max: toISO(ultimoDiaProxMes) };
+    return { min: toISO(proximaSegunda), max: toISO(ultimoDiaProxMes) };
   }
 
   const diaSemana = hoje.getDay(); // 0=Dom .. 6=Sáb
@@ -108,7 +115,10 @@ export default function Agendar({ usuario }) {
       }
       setCarregandoMeus(true);
       try {
-        const todas = await listarReservasDoProfessor(professorId);
+        const todas = (await listarReservasDoProfessor(professorId)).map((r) => ({
+          ...r,
+          data: toISODate(r.data) || r.data,
+        }));
         const daSemanaAtualEmDiante = todas.filter((r) => r.data >= hojeISO);
         const grupos = new Map();
         daSemanaAtualEmDiante.forEach((r) => {
@@ -171,6 +181,21 @@ export default function Agendar({ usuario }) {
     const localFinal = kit === 'vermelho' ? `${KITS.vermelho.restrito} · ${local.trim()}` : local.trim();
     if (periodosSelecionados.size === 0) {
       setErro('Selecione ao menos um período.');
+      return;
+    }
+    // Um mesmo professor não pode reservar dois kits diferentes para a mesma
+    // aula. As reservas fixas do Projeto Maker não contam para essa trava —
+    // só os agendamentos feitos pelo próprio professor aqui no app. O gestor,
+    // na área dele, não passa por esta verificação.
+    const conflitoDeKit = reservasDoDia.some(
+      (r) =>
+        r.professorId === professor.id &&
+        r.kit !== kit &&
+        periodosSelecionados.has(r.periodoId) &&
+        !String(r.grupoId || '').startsWith('projeto-maker-')
+    );
+    if (conflitoDeKit) {
+      setErro('Não é possível agendar 2 kits para a mesma aula.');
       return;
     }
 

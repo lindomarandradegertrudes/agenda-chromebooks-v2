@@ -272,6 +272,20 @@ input:disabled {
   font-weight: 600;
 }
 
+.acoes-tabela {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 0.85rem;
+  border: 1px solid var(--cor-borda);
+  background: #fff;
+  border-radius: 6px;
+}
+
 .kit-picker {
   display: flex;
   gap: 8px;

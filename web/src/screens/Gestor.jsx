@@ -9,6 +9,8 @@ import {
   removerBloqueio,
   listarGestores,
   criarGestor,
+  atualizarGestor,
+  removerGestor,
   listarProfessores,
   criarProfessor,
   removerProfessor,
@@ -616,6 +618,10 @@ function BloquearPeriodo() {
   );
 }
 
+// Só ela pode editar ou remover gestores (ver ehAdminDeGestores em firestore.rules) —
+// cadastrar novos gestores continua liberado pra qualquer gestor.
+const EMAIL_ADMIN_GESTORES = 'ana.steinbach@edu.joinville.sc.gov.br';
+
 function Gestores() {
   const [gestores, setGestores] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -623,6 +629,12 @@ function Gestores() {
   const [email, setEmail] = useState('');
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
+  const [editandoId, setEditandoId] = useState(null);
+  const [nomeEdicao, setNomeEdicao] = useState('');
+  const [emailEdicao, setEmailEdicao] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+
+  const podeAdministrar = auth.currentUser?.email === EMAIL_ADMIN_GESTORES;
 
   async function carregar() {
     setCarregando(true);
@@ -655,6 +667,35 @@ function Gestores() {
     } finally {
       setSalvando(false);
     }
+  }
+
+  function iniciarEdicao(g) {
+    setEditandoId(g.id);
+    setNomeEdicao(g.nome);
+    setEmailEdicao(g.email);
+  }
+
+  function cancelarEdicao() {
+    setEditandoId(null);
+  }
+
+  async function salvarEdicao(id) {
+    if (!nomeEdicao.trim() || !emailEdicao.trim()) return;
+    setSalvandoEdicao(true);
+    try {
+      await atualizarGestor(id, { nome: nomeEdicao.trim(), email: emailEdicao.trim() });
+      setEditandoId(null);
+      await carregar();
+    } catch {
+      setErro('Não foi possível salvar a edição. Tente novamente.');
+    } finally {
+      setSalvandoEdicao(false);
+    }
+  }
+
+  async function handleRemover(id) {
+    await removerGestor(id);
+    await carregar();
   }
 
   return (
@@ -692,15 +733,48 @@ function Gestores() {
             <tr>
               <th>Nome</th>
               <th>E-mail</th>
+              {podeAdministrar && <th>Ações</th>}
             </tr>
           </thead>
           <tbody>
-            {gestores.map((g) => (
-              <tr key={g.id}>
-                <td>{g.nome}</td>
-                <td>{g.email}</td>
-              </tr>
-            ))}
+            {gestores.map((g) =>
+              editandoId === g.id ? (
+                <tr key={g.id}>
+                  <td>
+                    <input value={nomeEdicao} onChange={(e) => setNomeEdicao(e.target.value)} />
+                  </td>
+                  <td>
+                    <input type="email" value={emailEdicao} onChange={(e) => setEmailEdicao(e.target.value)} />
+                  </td>
+                  <td className="acoes-tabela">
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={salvandoEdicao}
+                      onClick={() => salvarEdicao(g.id)}
+                    >
+                      {salvandoEdicao ? 'Salvando…' : 'Salvar'}
+                    </button>
+                    <button type="button" className="btn btn-sm" onClick={cancelarEdicao}>
+                      Cancelar
+                    </button>
+                  </td>
+                </tr>
+              ) : (
+                <tr key={g.id}>
+                  <td>{g.nome}</td>
+                  <td>{g.email}</td>
+                  {podeAdministrar && (
+                    <td className="acoes-tabela">
+                      <button type="button" className="btn btn-sm" onClick={() => iniciarEdicao(g)}>
+                        Editar
+                      </button>
+                      <ConfirmInline label="Remover" confirmLabel="Remover" onConfirm={() => handleRemover(g.id)} />
+                    </td>
+                  )}
+                </tr>
+              )
+            )}
           </tbody>
         </table>
       )}

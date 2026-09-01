@@ -8,6 +8,7 @@ import {
   orderBy,
   deleteDoc,
   doc,
+  updateDoc,
   writeBatch,
   serverTimestamp,
 } from 'firebase/firestore';
@@ -48,6 +49,14 @@ export async function listarGestores() {
 
 export async function criarGestor({ nome, email }) {
   await addDoc(collection(db, 'gestores'), { nome, email, criadoEm: serverTimestamp() });
+}
+
+export async function atualizarGestor(id, { nome, email }) {
+  await updateDoc(doc(db, 'gestores', id), { nome, email });
+}
+
+export async function removerGestor(id) {
+  await deleteDoc(doc(db, 'gestores', id));
 }
 
 // reservas

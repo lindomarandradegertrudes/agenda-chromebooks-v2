@@ -2,9 +2,12 @@
  * Cloud Function agendada — Agenda dos Kits Chromebook
  * Escola Agrícola Municipal Carlos Heins Funke
  *
- * Roda sozinha toda sexta-feira ao meio-dia (horário de Brasília) e envia:
- *   - para cada professor(a) com e-mail cadastrado: só as reservas dele(a)
- *   - para cada gestor(a) cadastrado(a): a agenda completa da semana seguinte
+ * Roda sozinha toda sexta-feira ao meio-dia (horário de Brasília):
+ *   - escreve a agenda completa da semana seguinte (uma tabela por kit) num
+ *     Google Doc fixo, sempre sobrescrevendo o conteúdo anterior;
+ *   - manda o link desse Doc por e-mail para cada gestor(a) cadastrado(a).
+ *
+ * Não manda mais e-mail individual por professor nem atualiza planilha.
  *
  * Nenhuma ação manual é necessária depois do deploy — os dados vêm direto
  * do Firestore, que é alimentado pelo próprio app conforme os professores
@@ -34,27 +37,38 @@ const EMAIL_PASS = defineSecret('EMAIL_PASS');
 // `firebase functions:secrets:set GESTOR_CODE`.
 const GESTOR_CODE = defineSecret('GESTOR_CODE');
 
-// ID da Google Sheet que recebe a agenda da semana (a parte entre /d/ e /edit
-// na URL da planilha). Crie uma planilha, compartilhe com o e-mail da conta
-// de serviço das Cloud Functions (Editor) e cole o ID aqui — o `firebase
-// deploy` pergunta o valor na primeira vez. Não é segredo, só configuração.
-const SHEET_ID = defineString('SHEET_ID');
+// ID do Google Doc que recebe a agenda semanal (a parte entre /d/ e /edit na
+// URL do documento). Crie um Google Doc, compartilhe com o e-mail da conta de
+// serviço das Cloud Functions dando permissão de *Editor*, e coloque o ID em
+// functions/.env.<project-id> (ver functions/.env.example). Não é segredo, só
+// configuração — o `firebase deploy` carrega esse arquivo automaticamente.
+const RELATORIO_DOC_ID = defineString('RELATORIO_DOC_ID');
 
 // Mantenha em sincronia com src/lib/schedule-config.js (é a mesma informação,
 // só que copiada aqui porque Cloud Functions não importa código do frontend).
 const PERIODO_ORDEM = ['M1', 'M2', 'M3', 'M4', 'M5', 'T1', 'T2', 'T3', 'T4', 'T5'];
 const TODOS_PERIODOS = {
-  M1: { inicio: '07:15', fim: '08:03' },
-  M2: { inicio: '08:03', fim: '08:51' },
-  M3: { inicio: '09:06', fim: '09:54' },
-  M4: { inicio: '09:54', fim: '10:42' },
-  M5: { inicio: '10:42', fim: '11:30' },
-  T1: { inicio: '12:30', fim: '13:18' },
-  T2: { inicio: '13:18', fim: '14:05' },
-  T3: { inicio: '14:05', fim: '14:54' },
-  T4: { inicio: '15:09', fim: '15:57' },
-  T5: { inicio: '15:57', fim: '16:45' },
+  M1: { label: '1ª aula', turno: 'manhã', inicio: '07:15', fim: '08:03' },
+  M2: { label: '2ª aula', turno: 'manhã', inicio: '08:03', fim: '08:51' },
+  M3: { label: '3ª aula', turno: 'manhã', inicio: '09:06', fim: '09:54' },
+  M4: { label: '4ª aula', turno: 'manhã', inicio: '09:54', fim: '10:42' },
+  M5: { label: '5ª aula', turno: 'manhã', inicio: '10:42', fim: '11:30' },
+  T1: { label: '1ª aula', turno: 'tarde', inicio: '12:30', fim: '13:18' },
+  T2: { label: '2ª aula', turno: 'tarde', inicio: '13:18', fim: '14:05' },
+  T3: { label: '3ª aula', turno: 'tarde', inicio: '14:05', fim: '14:54' },
+  T4: { label: '4ª aula', turno: 'tarde', inicio: '15:09', fim: '15:57' },
+  T5: { label: '5ª aula', turno: 'tarde', inicio: '15:57', fim: '16:45' },
 };
+// Quais aulas existem em cada dia (derivado do horário oficial da escola —
+// mantenha em sincronia com GRADE_SEMANA em src/lib/schedule-config.js).
+const GRADE_SEMANA = {
+  Segunda: ['M1', 'M2', 'M3', 'M4', 'M5', 'T1', 'T2', 'T3', 'T4', 'T5'],
+  Terça: ['M1', 'M2', 'M3', 'M4', 'M5', 'T1', 'T2', 'T3', 'T4', 'T5'],
+  Quarta: ['M1', 'M2', 'M3', 'M4', 'M5', 'T1', 'T2', 'T3'],
+  Quinta: ['M1', 'M2', 'M3', 'M4', 'M5', 'T1', 'T2', 'T3', 'T4', 'T5'],
+  Sexta: ['M1', 'M2', 'M3', 'M4'],
+};
+const DIAS_ORDEM = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
 const KITS = {
   vermelho: { nome: 'Kit Vermelho' },
   azul: { nome: 'Kit Azul' },
@@ -127,37 +141,111 @@ exports.autenticarGestor = onCall({ secrets: [GESTOR_CODE], region: 'southameric
   return { ok: true };
 });
 
+/**
+ * Diagnóstico SOMENTE-LEITURA do campo `data` da coleção `reservas`.
+ * Não altera nada — só lista os documentos cujo `data` não está no formato
+ * "AAAA-MM-DD" (Timestamp, Date, string com hora, DD/MM/AAAA etc.), pra
+ * decidir a migração com segurança.
+ *
+ * Uso: abrir a URL da função com ?codigo=<GESTOR_CODE> no navegador.
+ */
+exports.diagnosticarDatasReservas = onRequest(
+  { secrets: [GESTOR_CODE], region: 'southamerica-east1' },
+  async (req, res) => {
+    if ((req.query.codigo || '') !== GESTOR_CODE.value()) {
+      res.status(403).send('Código incorreto. Use ?codigo=<GESTOR_CODE>.');
+      return;
+    }
+
+    const snap = await db.collection('reservas').get();
+    const problemas = [];
+    let ok = 0;
+
+    snap.docs.forEach((d) => {
+      const data = d.data();
+      const valor = data.data;
+      const tipo =
+        valor && typeof valor === 'object'
+          ? valor.constructor && valor.constructor.name
+            ? valor.constructor.name
+            : 'object'
+          : typeof valor;
+      const ehStringISO = typeof valor === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(valor);
+
+      if (ehStringISO) {
+        ok++;
+        return;
+      }
+
+      let sugestao = null;
+      try {
+        if (valor && typeof valor.toDate === 'function') sugestao = toISO(valor.toDate());
+        else if (valor instanceof Date) sugestao = toISO(valor);
+        else if (typeof valor === 'string') {
+          const m = valor.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/) || null;
+          if (m) sugestao = `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+        }
+      } catch (e) {
+        sugestao = `ERRO: ${e.message}`;
+      }
+
+      // Reservas do Projeto Maker carregam a data pretendida no próprio
+      // grupoId ("projeto-maker-AAAA-MM-DD") — referência confiável.
+      let dataDoGrupo = null;
+      const g = String(data.grupoId || '').match(/^projeto-maker-(\d{4}-\d{2}-\d{2})$/);
+      if (g) dataDoGrupo = g[1];
+
+      problemas.push({
+        id: d.id,
+        tipo,
+        valorBruto: JSON.stringify(valor),
+        diaSemana: data.diaSemana || null,
+        grupoId: data.grupoId || null,
+        sugestaoPeloValor: sugestao,
+        sugestaoPeloGrupoId: dataDoGrupo,
+      });
+    });
+
+    res.status(200).json({
+      totalReservas: snap.size,
+      comDataOkStringISO: ok,
+      comProblema: problemas.length,
+      problemas,
+    });
+  }
+);
+
 async function executarEnvio() {
   await garantirReservasProjetoMaker();
 
   const { inicio, fim } = calcularProximaSemana();
 
-  const reservasSnap = await db
-    .collection('reservas')
-    .where('data', '>=', inicio)
-    .where('data', '<=', fim)
-    .get();
+  const [reservasSnap, bloqueiosSnap] = await Promise.all([
+    db.collection('reservas').where('data', '>=', inicio).where('data', '<=', fim).get(),
+    db.collection('bloqueios').where('data', '>=', inicio).where('data', '<=', fim).get(),
+  ]);
   const reservas = reservasSnap.docs.map((d) => d.data());
-
-  if (reservas.length === 0) {
-    console.log(`Nenhuma reserva entre ${inicio} e ${fim}. Nada foi enviado.`);
-    return `Nenhuma reserva entre ${inicio} e ${fim}. Nada foi enviado.`;
-  }
+  const bloqueios = bloqueiosSnap.docs.map((d) => d.data());
 
   const gestoresSnap = await db.collection('gestores').get();
-  const gestores = gestoresSnap.docs.map((d) => d.data());
+  const gestores = gestoresSnap.docs.map((d) => d.data()).filter((g) => g.email);
 
-  const linkPlanilha = await atualizarPlanilha(reservas, inicio, fim);
+  const linkDoc = await escreverRelatorioNoDoc(reservas, bloqueios, inicio, fim);
+
+  if (gestores.length === 0) {
+    const msg = 'Relatório atualizado, mas nenhum gestor com e-mail cadastrado — nada foi enviado.';
+    console.log(msg);
+    return msg;
+  }
 
   const transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: { user: EMAIL_USER.value(), pass: EMAIL_PASS.value() },
   });
 
-  const enviadosProfessores = await enviarParaProfessores(transporter, reservas, inicio, fim, linkPlanilha);
-  const enviadosGestores = await enviarParaGestores(transporter, reservas, gestores, inicio, fim, linkPlanilha);
+  const enviados = await enviarLinkParaGestores(transporter, gestores, inicio, fim, linkDoc, reservas.length);
 
-  const resumo = `Envio concluído: ${enviadosProfessores} e-mail(s) para professores, ${enviadosGestores} para gestores.`;
+  const resumo = `Relatório atualizado (${reservas.length} reserva(s)); link enviado para ${enviados} gestor(es).`;
   console.log(resumo);
   return resumo;
 }
@@ -252,58 +340,203 @@ function segundaDaSemana(data) {
 }
 
 /**
- * Sobrescreve a aba "Semana" da Google Sheet configurada em SHEET_ID com a
- * agenda da semana. Se a planilha ainda não foi compartilhada com a conta de
- * serviço (ou SHEET_ID não foi configurado), só loga um aviso e segue sem
- * planilha — isso nunca deve impedir o envio dos e-mails.
+ * Sobrescreve o conteúdo do Google Doc configurado em RELATORIO_DOC_ID com a
+ * agenda da semana: um cabeçalho e uma tabela nativa por kit (coluna de
+ * horário + uma coluna por dia útil). Só entram as linhas de período que têm
+ * alguma reserva ou bloqueio. Se o Doc não foi configurado/compartilhado, só
+ * loga um aviso e devolve null — isso nunca impede o envio do e-mail.
  */
-async function atualizarPlanilha(reservas, inicio, fim) {
-  const sheetId = SHEET_ID.value();
-  if (!sheetId) {
-    console.log('SHEET_ID não configurado — pulando atualização da planilha.');
+async function escreverRelatorioNoDoc(reservas, bloqueios, inicio, fim) {
+  const documentId = RELATORIO_DOC_ID.value();
+  if (!documentId) {
+    console.warn('RELATORIO_DOC_ID não configurado — pulando a escrita do Google Doc.');
     return null;
   }
 
+  const dias = DIAS_ORDEM.map((nome, i) => {
+    const dt = new Date(`${inicio}T12:00:00`);
+    dt.setDate(dt.getDate() + i);
+    return { nome, dataISO: toISO(dt) };
+  });
+
+  const tabelas = Object.keys(KITS).map((kitId) => montarTabelaKit(kitId, dias, reservas, bloqueios));
+
   try {
-    const auth = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/spreadsheets'] });
-    const sheets = google.sheets({ version: 'v4', auth });
+    const auth = new google.auth.GoogleAuth({ scopes: ['https://www.googleapis.com/auth/documents'] });
+    const docs = google.docs({ version: 'v1', auth });
 
-    const linhas = [['Data', 'Dia da semana', 'Horário', 'Kit', 'Local', 'Professor(a)', 'Componente Curricular']];
-    const porData = agruparPor(reservas, (r) => r.data);
-    Object.keys(porData)
-      .sort()
-      .forEach((data) => {
-        const doDia = porData[data].sort(
-          (a, b) => PERIODO_ORDEM.indexOf(a.periodoId) - PERIODO_ORDEM.indexOf(b.periodoId)
-        );
-        doDia.forEach((r) => {
-          const p = TODOS_PERIODOS[r.periodoId] || {};
-          const kit = KITS[r.kit] || { nome: r.kit };
-          linhas.push([
-            fmtDataBR(data),
-            r.diaSemana || '',
-            `${p.inicio || ''}-${p.fim || ''}`,
-            kit.nome,
-            r.local,
-            r.professorNome || '',
-            r.professorArea || '',
-          ]);
-        });
-      });
+    await limparCorpoDoc(docs, documentId);
+    await inserirTitulo(
+      docs,
+      documentId,
+      `Agenda dos Kits Chromebook — semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}`,
+      `${NOME_ESCOLA} · atualizado automaticamente em ${fmtDataBR(toISO(new Date()))}`
+    );
+    for (const tabela of tabelas) {
+      await inserirSecaoTabela(docs, documentId, tabela);
+    }
 
-    await sheets.spreadsheets.values.clear({ spreadsheetId: sheetId, range: 'A:G' });
-    await sheets.spreadsheets.values.update({
-      spreadsheetId: sheetId,
-      range: 'A1',
-      valueInputOption: 'RAW',
-      requestBody: { values: linhas },
-    });
-
-    console.log(`Planilha atualizada com a semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}.`);
-    return `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    console.log(`Google Doc atualizado com a semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}.`);
+    return `https://docs.google.com/document/d/${documentId}/edit`;
   } catch (err) {
-    console.error('Não foi possível atualizar a planilha (verifique se ela foi compartilhada com a conta de serviço):', err.message);
+    console.error(
+      'Não foi possível atualizar o Google Doc (confira se ele foi compartilhado como Editor com a conta de serviço das Functions):',
+      err.message
+    );
     return null;
+  }
+}
+
+/** Monta o modelo (cabeçalho + linhas) da tabela de um kit. */
+function montarTabelaKit(kitId, dias, reservas, bloqueios) {
+  const porChave = agruparPor(
+    reservas.filter((r) => r.kit === kitId),
+    (r) => `${r.data}|${r.periodoId}`
+  );
+  const bloqPorData = agruparPor(bloqueios, (b) => b.data);
+  const bloqueioNa = (dataISO, periodoId) =>
+    (bloqPorData[dataISO] || []).find((b) => Array.isArray(b.periodos) && b.periodos.includes(periodoId));
+
+  const header = ['Horário', ...dias.map((d) => `${d.nome}\n${fmtDataBR(d.dataISO).slice(0, 5)}`)];
+  const linhas = [];
+
+  for (const periodoId of PERIODO_ORDEM) {
+    const p = TODOS_PERIODOS[periodoId];
+    const temAlgo = dias.some(
+      (d) =>
+        GRADE_SEMANA[d.nome].includes(periodoId) &&
+        (bloqueioNa(d.dataISO, periodoId) || (porChave[`${d.dataISO}|${periodoId}`] || []).length > 0)
+    );
+    if (!temAlgo) continue;
+
+    const celulas = [`${p.label} (${p.turno})\n${p.inicio}–${p.fim}`];
+    for (const d of dias) {
+      if (!GRADE_SEMANA[d.nome].includes(periodoId)) {
+        celulas.push('—');
+        continue;
+      }
+      const bloq = bloqueioNa(d.dataISO, periodoId);
+      if (bloq) {
+        celulas.push(`Bloqueado — ${bloq.motivo || 'sem motivo'}`);
+        continue;
+      }
+      const rs = porChave[`${d.dataISO}|${periodoId}`] || [];
+      if (rs.length === 0) {
+        celulas.push('livre');
+        continue;
+      }
+      celulas.push(
+        rs
+          .map(
+            (r) =>
+              `${r.local || '—'} — ${r.professorNome || 'professor não identificado'}` +
+              (r.professorArea ? ` (${r.professorArea})` : '')
+          )
+          .join('\n')
+      );
+    }
+    linhas.push(celulas);
+  }
+
+  return { titulo: (KITS[kitId] || { nome: kitId }).nome, header, linhas };
+}
+
+/** Apaga tudo do corpo do Doc, deixando só o parágrafo final obrigatório. */
+async function limparCorpoDoc(docs, documentId) {
+  const { data } = await docs.documents.get({ documentId });
+  const content = data.body.content || [];
+  const fim = content.length ? content[content.length - 1].endIndex : 1;
+  if (fim > 2) {
+    await docs.documents.batchUpdate({
+      documentId,
+      requestBody: { requests: [{ deleteContentRange: { range: { startIndex: 1, endIndex: fim - 1 } } }] },
+    });
+  }
+}
+
+/** Índice válido de inserção no fim do corpo (antes do \n final). */
+async function fimDoDoc(docs, documentId) {
+  const { data } = await docs.documents.get({ documentId });
+  const content = data.body.content || [];
+  return (content.length ? content[content.length - 1].endIndex : 2) - 1;
+}
+
+async function inserirTitulo(docs, documentId, titulo, subtitulo) {
+  const texto = `${titulo}\n${subtitulo}\n`;
+  await docs.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests: [
+        { insertText: { location: { index: 1 }, text: texto } },
+        {
+          updateParagraphStyle: {
+            range: { startIndex: 1, endIndex: 1 + titulo.length + 1 },
+            paragraphStyle: { namedStyleType: 'HEADING_1' },
+            fields: 'namedStyleType',
+          },
+        },
+        {
+          updateParagraphStyle: {
+            range: { startIndex: 1 + titulo.length + 1, endIndex: 1 + texto.length },
+            paragraphStyle: { namedStyleType: 'SUBTITLE' },
+            fields: 'namedStyleType',
+          },
+        },
+      ],
+    },
+  });
+}
+
+/** Insere o nome do kit (Heading 2) + a tabela preenchida no fim do Doc. */
+async function inserirSecaoTabela(docs, documentId, tabela) {
+  const nColunas = tabela.header.length;
+  const nLinhas = tabela.linhas.length + 1;
+  const nome = tabela.titulo;
+
+  let idx = await fimDoDoc(docs, documentId);
+  await docs.documents.batchUpdate({
+    documentId,
+    requestBody: {
+      requests: [
+        { insertText: { location: { index: idx }, text: `${nome}\n` } },
+        {
+          updateParagraphStyle: {
+            range: { startIndex: idx, endIndex: idx + nome.length + 1 },
+            paragraphStyle: { namedStyleType: 'HEADING_2' },
+            fields: 'namedStyleType',
+          },
+        },
+      ],
+    },
+  });
+
+  idx = await fimDoDoc(docs, documentId);
+  await docs.documents.batchUpdate({
+    documentId,
+    requestBody: { requests: [{ insertTable: { rows: nLinhas, columns: nColunas, location: { index: idx } } }] },
+  });
+
+  // Preenche as células. As posições são lidas do Doc já com a tabela vazia e
+  // o texto é inserido de trás pra frente, pra uma inserção não deslocar o
+  // índice das células ainda não preenchidas.
+  const valores = [...tabela.header, ...tabela.linhas.flat()];
+  const { data } = await docs.documents.get({ documentId });
+  const tabelaEl = [...(data.body.content || [])].reverse().find((el) => el.table);
+  if (!tabelaEl) throw new Error('tabela recém-inserida não encontrada no Doc');
+
+  const inicios = [];
+  tabelaEl.table.tableRows.forEach((row) => {
+    row.tableCells.forEach((cell) => inicios.push(cell.content[0].startIndex));
+  });
+
+  const requests = inicios
+    .map((startIndex, i) => ({ startIndex, text: valores[i] || '' }))
+    .filter((par) => par.text)
+    .sort((a, b) => b.startIndex - a.startIndex)
+    .map((par) => ({ insertText: { location: { index: par.startIndex }, text: par.text } }));
+
+  if (requests.length) {
+    await docs.documents.batchUpdate({ documentId, requestBody: { requests } });
   }
 }
 
@@ -329,42 +562,29 @@ function toISO(dt) {
   return `${y}-${m}-${d}`;
 }
 
-async function enviarParaProfessores(transporter, reservas, inicio, fim, linkPlanilha) {
-  const porEmail = agruparPor(
-    reservas.filter((r) => r.professorEmail),
-    (r) => r.professorEmail
-  );
-  const emails = Object.keys(porEmail);
+async function enviarLinkParaGestores(transporter, gestores, inicio, fim, linkDoc, totalReservas) {
+  const assunto = `Agenda de Chromebooks — semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}`;
+  const corpo = [
+    `A agenda completa dos kits para a semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)} foi atualizada.`,
+    '',
+    totalReservas === 0
+      ? 'Nenhuma reserva registrada para esta semana até o momento.'
+      : `${totalReservas} reserva(s) registrada(s).`,
+    '',
+    linkDoc
+      ? `Ver no Google Doc: ${linkDoc}`
+      : '(Não foi possível gerar o link do Google Doc nesta execução — verifique os logs da função.)',
+    '',
+    '—',
+    NOME_ESCOLA,
+  ].join('\n');
 
-  for (const email of emails) {
-    const itens = porEmail[email];
-    const nome = itens[0].professorNome || 'Professor(a)';
-    const assunto = `Sua agenda de Chromebooks — semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}`;
-    const corpo = montarCorpoEmail(
-      `Olá, ${nome}! Segue sua agenda de Chromebooks para a semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}:`,
-      itens,
-      linkPlanilha
-    );
-    await transporter.sendMail({ from: EMAIL_USER.value(), to: email, subject: assunto, text: corpo });
-  }
-  return emails.length;
-}
-
-async function enviarParaGestores(transporter, reservas, gestores, inicio, fim, linkPlanilha) {
-  const comEmail = gestores.filter((g) => g.email);
-  if (comEmail.length === 0) return 0;
-
-  const assunto = `Agenda completa de Chromebooks — semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}`;
-  const corpo = montarCorpoEmail(
-    `Agenda completa de todos os kits para a semana de ${fmtDataBR(inicio)} a ${fmtDataBR(fim)}:`,
-    reservas,
-    linkPlanilha
-  );
-
-  for (const g of comEmail) {
+  let enviados = 0;
+  for (const g of gestores) {
     await transporter.sendMail({ from: EMAIL_USER.value(), to: g.email, subject: assunto, text: corpo });
+    enviados++;
   }
-  return comEmail.length;
+  return enviados;
 }
 
 function agruparPor(lista, chaveFn) {
@@ -377,33 +597,13 @@ function agruparPor(lista, chaveFn) {
   return grupos;
 }
 
-function montarCorpoEmail(introducao, itens, linkPlanilha) {
-  const porData = agruparPor(itens, (i) => i.data);
-  const datasOrdenadas = Object.keys(porData).sort();
-
-  let texto = introducao + '\n\n';
-  datasOrdenadas.forEach((data) => {
-    const doDia = porData[data].sort(
-      (a, b) => PERIODO_ORDEM.indexOf(a.periodoId) - PERIODO_ORDEM.indexOf(b.periodoId)
-    );
-    texto += `${doDia[0].diaSemana}, ${fmtDataBR(data)}\n`;
-    doDia.forEach((r) => {
-      const p = TODOS_PERIODOS[r.periodoId] || {};
-      const kit = KITS[r.kit] || { nome: r.kit };
-      const professor = r.professorNome || 'professor não identificado';
-      const componente = r.professorArea ? ` (${r.professorArea})` : '';
-      texto += `  ${p.inicio || ''}-${p.fim || ''} · ${kit.nome} · ${r.local} · ${professor}${componente}\n`;
-    });
-    texto += '\n';
-  });
-  if (linkPlanilha) {
-    texto += `Também disponível em planilha: ${linkPlanilha}\n\n`;
-  }
-  texto += `—\n${NOME_ESCOLA}`;
-  return texto;
-}
-
-function fmtDataBR(dataISO) {
-  const [y, m, d] = dataISO.split('-');
-  return `${d}/${m}/${y}`;
+// Tolerante a valores fora do formato "AAAA-MM-DD" (Timestamp já convertido,
+// string com hora etc.) — devolve o que der ou o valor original como texto.
+function fmtDataBR(valor) {
+  if (valor && typeof valor.toDate === 'function') valor = toISO(valor.toDate());
+  else if (valor instanceof Date) valor = toISO(valor);
+  const s = String(valor || '');
+  const m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (!m) return s;
+  return `${m[3].padStart(2, '0')}/${m[2].padStart(2, '0')}/${m[1]}`;
 }

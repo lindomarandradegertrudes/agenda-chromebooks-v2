@@ -10,7 +10,7 @@ import {
   turnoDoPeriodo,
 } from '../lib/schedule-config';
 import { listarReservasNoIntervalo, listarBloqueiosNoIntervalo } from '../lib/firestore-api';
-import { fmtDataBR } from '../lib/format';
+import { fmtDataBR, toISODate } from '../lib/format';
 
 const KIT_IDS = Object.keys(KITS);
 
@@ -41,8 +41,10 @@ export default function GradeSemana() {
     const fim = dias[dias.length - 1].data;
     Promise.all([listarReservasNoIntervalo(inicio, fim), listarBloqueiosNoIntervalo(inicio, fim)])
       .then(([r, b]) => {
-        setReservas(r);
-        setBloqueios(b);
+        // Normaliza `data` (alguns documentos antigos vêm como Timestamp/ISO
+        // com hora) pra bater com as datas "AAAA-MM-DD" das colunas.
+        setReservas(r.map((x) => ({ ...x, data: toISODate(x.data) || x.data })));
+        setBloqueios(b.map((x) => ({ ...x, data: toISODate(x.data) || x.data })));
       })
       .finally(() => setCarregando(false));
   }, [dias]);

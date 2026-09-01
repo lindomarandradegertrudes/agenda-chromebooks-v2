@@ -26,6 +26,12 @@ service cloud.firestore {
       return autenticado() && request.auth.token.email == email;
     }
 
+    // Só a Ana Lúcia Steinbach pode editar ou remover gestores — os demais
+    // gestores continuam podendo cadastrar novos (allow create abaixo).
+    function ehAdminDeGestores() {
+      return autenticado() && request.auth.token.email == 'ana.steinbach@edu.joinville.sc.gov.br';
+    }
+
     match /professores/{id} {
       allow read: if autenticado();
       allow create: if ehDono(request.resource.data.email) || ehGestor();
@@ -34,7 +40,8 @@ service cloud.firestore {
 
     match /gestores/{id} {
       allow read: if autenticado();
-      allow write: if ehGestor();
+      allow create: if ehGestor();
+      allow update, delete: if ehAdminDeGestores();
     }
 
     match /reservas/{id} {

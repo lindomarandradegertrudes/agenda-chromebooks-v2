@@ -24,10 +24,11 @@ Substitui o controle manual por planilha: professores agendam os kits pelo site,
 - **Professores** — listagem (cadastro é automático no primeiro login de cada professor, ou manual pelo gestor); campo "Componente Curricular" no lugar do antigo "Matéria".
 - **Área do gestor** — protegida por um segundo código (validado no servidor, nunca exposto no bundle do site): agendar para qualquer professor(a) sem restrição de data, gerenciar/cancelar qualquer reserva, bloquear períodos, cadastrar/remover professores, cadastrar gestores.
 - **Projeto Maker** — reserva recorrente e permanente do Kit Vermelho (Sala Maker) para Ana Lúcia Steinbach, segunda a quinta, 5ª aula da manhã + 1ª aula da tarde. Mantida automaticamente pela Cloud Function `garantirReservasProjetoMaker` (buffer rolante de 6 semanas à frente); um dia cancelado manualmente nunca é recriado, e a reserva aparece normalmente em "Meus agendamentos" da professora, podendo ser cancelada como qualquer outra.
+- **Trava de kit duplicado** — um professor não consegue reservar dois kits diferentes para a mesma aula (mesmo período/dia); a mensagem *"Não é possível agendar 2 kits para a mesma aula"* aparece no formulário. As reservas fixas do Projeto Maker não contam para a trava, e a área do gestor não passa por ela.
 - **Envio automático** — toda sexta-feira 12h (horário de Brasília), a Cloud Function `enviarResumoSemanal`:
-  - manda pra cada professor(a) com e-mail cadastrado só a agenda dele(a);
-  - manda pra cada gestor(a) cadastrado(a) a agenda completa;
-  - atualiza uma Google Sheet fixa com a semana e inclui o link no e-mail.
+  - escreve a agenda completa da semana seguinte (uma tabela nativa por kit) num Google Doc fixo, sempre sobrescrevendo o conteúdo anterior (ID em `functions/.env.<project-id>` como `RELATORIO_DOC_ID`; o Doc precisa estar compartilhado como Editor com a conta de serviço e a Google Docs API habilitada);
+  - manda o link desse Doc por e-mail para cada gestor(a) cadastrado(a).
+  - Não manda mais e-mail individual por professor nem atualiza planilha.
 
 ## Estrutura
 
@@ -75,7 +76,7 @@ firebase functions:secrets:set EMAIL_PASS    # senha de app do Gmail
 firebase functions:secrets:set GESTOR_CODE   # código de acesso da área do gestor
 ```
 
-Config não sensível (`SHEET_ID` da Google Sheet semanal) fica em `functions/.env.<project-id>` — veja `functions/.env.example`.
+Config não sensível (`RELATORIO_DOC_ID` do Google Doc semanal) fica em `functions/.env.<project-id>` — veja `functions/.env.example`.
 
 ## Deploy
 
