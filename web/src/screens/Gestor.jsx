@@ -662,10 +662,6 @@ function BloquearPeriodo() {
   );
 }
 
-// Só ela pode editar ou remover gestores (ver ehAdminDeGestores em firestore.rules) —
-// cadastrar novos gestores continua liberado pra qualquer gestor.
-const EMAIL_ADMIN_GESTORES = 'ana.steinbach@edu.joinville.sc.gov.br';
-
 function Gestores() {
   const [gestores, setGestores] = useState([]);
   const [carregando, setCarregando] = useState(true);
@@ -677,8 +673,6 @@ function Gestores() {
   const [nomeEdicao, setNomeEdicao] = useState('');
   const [emailEdicao, setEmailEdicao] = useState('');
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
-
-  const podeAdministrar = auth.currentUser?.email === EMAIL_ADMIN_GESTORES;
 
   async function carregar() {
     setCarregando(true);
@@ -777,7 +771,7 @@ function Gestores() {
             <tr>
               <th>Nome</th>
               <th>E-mail</th>
-              {podeAdministrar && <th>Ações</th>}
+              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -808,14 +802,12 @@ function Gestores() {
                 <tr key={g.id}>
                   <td>{g.nome}</td>
                   <td>{g.email}</td>
-                  {podeAdministrar && (
                     <td className="acoes-tabela">
                       <button type="button" className="btn btn-sm" onClick={() => iniciarEdicao(g)}>
                         Editar
                       </button>
                       <ConfirmInline label="Remover" confirmLabel="Remover" onConfirm={() => handleRemover(g.id)} />
                     </td>
-                  )}
                 </tr>
               )
             )}
