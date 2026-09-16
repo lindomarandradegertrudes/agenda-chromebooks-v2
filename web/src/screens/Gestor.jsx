@@ -13,6 +13,7 @@ import {
   removerGestor,
   listarProfessores,
   criarProfessor,
+  atualizarProfessor,
   removerProfessor,
   criarReservas,
 } from '../lib/firestore-api';
@@ -313,6 +314,9 @@ function AgendarParaProfessor() {
 }
 
 function ProfessoresGestor() {
+  const [edicao, setEdicao] = useState(null);
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [erroEdicao, setErroEdicao] = useState('');
   const [professores, setProfessores] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [nome, setNome] = useState('');
@@ -338,7 +342,7 @@ function ProfessoresGestor() {
     e.preventDefault();
     setErro('');
     if (!nome.trim() || !area.trim() || !email.trim()) {
-      setErro('Preencha nome, matéria e e-mail.');
+      setErro('Preencha nome, componente curricular e e-mail.');
       return;
     }
     setSalvando(true);
@@ -352,6 +356,21 @@ function ProfessoresGestor() {
       setErro('Não foi possível salvar. Tente novamente.');
     } finally {
       setSalvando(false);
+    }
+  }
+
+  async function salvarEdicao(e) {
+    e.preventDefault();
+    setErroEdicao('');
+    setSalvandoEdicao(true);
+    try {
+      await atualizarProfessor(edicao.id, edicao);
+      setEdicao(null);
+      await carregar();
+    } catch (err) {
+      setErroEdicao(err.code ? 'Não foi possível salvar a edição. Tente novamente.' : err.message);
+    } finally {
+      setSalvandoEdicao(false);
     }
   }
 
@@ -397,12 +416,37 @@ function ProfessoresGestor() {
         <ul className="agendamentos-list">
           {professores.map((p) => (
             <li key={p.id} className="agendamento-item">
+              {edicao?.id === p.id ? (
+                <form className="form professor-edicao" onSubmit={salvarEdicao}>
+                  <div className="form-row">
+                    <label>Nome
+                      <input required autoFocus disabled={salvandoEdicao} value={edicao.nome} onChange={(e) => setEdicao({ ...edicao, nome: e.target.value })} />
+                    </label>
+                    <label>Componente Curricular
+                      <input required disabled={salvandoEdicao} value={edicao.area} onChange={(e) => setEdicao({ ...edicao, area: e.target.value })} />
+                    </label>
+                    <label>E-mail
+                      <input required type="email" disabled={salvandoEdicao} value={edicao.email} onChange={(e) => setEdicao({ ...edicao, email: e.target.value })} />
+                    </label>
+                  </div>
+                  <p className="muted">Use o e-mail institucional de acesso do professor. Os agendamentos continuarão vinculados ao cadastro.</p>
+                  {erroEdicao && <p role="alert" className="form-error">{erroEdicao}</p>}
+                  <div className="acoes-tabela">
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={salvandoEdicao}>{salvandoEdicao ? 'Salvando…' : 'Salvar'}</button>
+                    <button type="button" className="btn btn-sm" disabled={salvandoEdicao} onClick={() => setEdicao(null)}>Cancelar edição</button>
+                  </div>
+                </form>
+              ) : (<>
               <div>
                 <strong>{p.nome}</strong>
                 <span className="muted"> · {p.area}</span>
                 <div className="muted">{p.email}</div>
               </div>
-              <ConfirmInline onConfirm={() => handleRemover(p.id)} />
+              <div className="acoes-tabela">
+                <button type="button" className="btn btn-sm" disabled={salvandoEdicao} onClick={() => { setEdicao({ id: p.id, nome: p.nome || '', area: p.area || '', email: p.email || '' }); setErroEdicao(''); }}>Editar</button>
+                <ConfirmInline label="Remover" confirmLabel="Remover" onConfirm={() => handleRemover(p.id)} />
+              </div>
+              </>)}
             </li>
           ))}
         </ul>

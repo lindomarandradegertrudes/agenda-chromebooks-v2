@@ -40,6 +40,30 @@ export async function removerProfessor(id) {
   await deleteDoc(doc(db, 'professores', id));
 }
 
+export async function atualizarProfessor(id, { nome, area, email }) {
+  nome = nome.trim();
+  area = area.trim();
+  email = email.trim().toLowerCase();
+  if (!nome || !area || !/^[^\s@]+@edu\.joinville\.sc\.gov\.br$/.test(email)) {
+    throw new Error('Preencha nome, componente curricular e um e-mail institucional válido.');
+  }
+  const duplicados = await getDocs(query(collection(db, 'professores'), where('email', '==', email)));
+  if (duplicados.docs.some((d) => d.id !== id)) {
+    throw new Error('Este e-mail já pertence a outro professor cadastrado.');
+  }
+  const reservas = await getDocs(query(collection(db, 'reservas'), where('professorId', '==', id)));
+  // Uma única operação atômica evita trocar o login sem atualizar a propriedade das reservas.
+  if (reservas.size > 499) {
+    throw new Error('Este cadastro possui muitas reservas. Solicite suporte para realizar a alteração com segurança.');
+  }
+  const batch = writeBatch(db);
+  batch.update(doc(db, 'professores', id), { nome, area, email });
+  reservas.docs.forEach((reserva) => {
+    batch.update(reserva.ref, { professorNome: nome, professorEmail: email });
+  });
+  await batch.commit();
+}
+
 // gestores
 
 export async function listarGestores() {

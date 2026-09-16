@@ -442,6 +442,8 @@ input:disabled {
   gap: 10px;
 }
 
+.professor-edicao { width: 100%; min-width: 0; }
+
 .agendamento-item {
   display: flex;
   justify-content: space-between;
