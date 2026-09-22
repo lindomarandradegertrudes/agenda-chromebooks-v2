@@ -342,9 +342,11 @@ function segundaDaSemana(data) {
 /**
  * Sobrescreve o conteúdo do Google Doc configurado em RELATORIO_DOC_ID com a
  * agenda da semana: um cabeçalho e uma tabela nativa por kit (coluna de
- * horário + uma coluna por dia útil). Só entram as linhas de período que têm
- * alguma reserva ou bloqueio. Se o Doc não foi configurado/compartilhado, só
- * loga um aviso e devolve null — isso nunca impede o envio do e-mail.
+ * horário + uma coluna por dia útil). Entram todas as linhas de período do
+ * horário oficial, ocupadas ou não — as livres ficam marcadas "livre", para
+ * o gestor preencher manualmente depois. Se o Doc não foi
+ * configurado/compartilhado, só loga um aviso e devolve null — isso nunca
+ * impede o envio do e-mail.
  */
 async function escreverRelatorioNoDoc(reservas, bloqueios, inicio, fim) {
   const documentId = RELATORIO_DOC_ID.value();
@@ -402,12 +404,11 @@ function montarTabelaKit(kitId, dias, reservas, bloqueios) {
 
   for (const periodoId of PERIODO_ORDEM) {
     const p = TODOS_PERIODOS[periodoId];
-    const temAlgo = dias.some(
-      (d) =>
-        GRADE_SEMANA[d.nome].includes(periodoId) &&
-        (bloqueioNa(d.dataISO, periodoId) || (porChave[`${d.dataISO}|${periodoId}`] || []).length > 0)
-    );
-    if (!temAlgo) continue;
+    // Linha só é pulada se NENHUM dia da semana tem essa aula no horário
+    // oficial (ex.: 5ª aula da tarde não existe às sextas) — fora isso, toda
+    // linha entra, ocupada ou não, pra servir de grade em branco.
+    const existeEmAlgumDia = dias.some((d) => GRADE_SEMANA[d.nome].includes(periodoId));
+    if (!existeEmAlgumDia) continue;
 
     const celulas = [`${p.label} (${p.turno})\n${p.inicio}–${p.fim}`];
     for (const d of dias) {
