@@ -22,13 +22,16 @@ import ConfirmInline from '../components/ConfirmInline';
 
 const KIT_IDS = Object.keys(KITS);
 
-// Fora da última semana do mês: mantém a janela normal de duas semanas
-// seguintes à próxima sexta-feira que fecha o prazo — depois que essa sexta
-// passa (a partir do sábado), a janela pula pra frente.
+// Janela de agendamento do professor(a), sempre por ciclos mensais:
 //
-// Na última semana ISO do mês (a semana, de segunda a domingo, que contém o
-// último dia do mês), a agenda do mês seguinte inteiro é liberada, mantendo
-// também o restante do mês corrente disponível até essa liberação.
+// - Fim da janela: o mês inteiro fica aberto. Quando faltam 8 dias (ou menos)
+//   para o dia 1º do mês seguinte, o mês seguinte inteiro é liberado e
+//   continua aberto até o fim dele; o próximo ciclo só abre 8 dias antes do
+//   mês depois desse. Antes do gatilho, vale o mês corrente até o último dia.
+// - Início da janela: nunca se agenda a semana corrente — o prazo de cada
+//   semana é a sexta-feira que a antecede, e a partir do sábado a semana
+//   seguinte também já fechou. Por isso o piso é a próxima segunda-feira
+//   (ou a seguinte, se hoje for sábado/domingo).
 function calcularLimites() {
   const hoje = new Date();
 
@@ -36,25 +39,22 @@ function calcularLimites() {
   const gatilhoProxMes = new Date(primeiroDiaProxMes);
   gatilhoProxMes.setDate(gatilhoProxMes.getDate() - 8);
 
-  // Professor(a) nunca agenda para a semana corrente (o prazo é sempre a
-  // sexta-feira que antecede a semana em questão — quando essa sexta já
-  // passou, a semana toda fica fora do alcance). O piso de qualquer janela
-  // é, portanto, a segunda-feira da próxima semana.
-  const proximaSegunda = segundaDaSemanaDe(hoje);
-  proximaSegunda.setDate(proximaSegunda.getDate() + 7);
-
-  if (hoje >= gatilhoProxMes) {
-    const ultimoDiaProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 2, 0);
-    return { min: toISO(proximaSegunda), max: toISO(ultimoDiaProxMes) };
-  }
-
   const diaSemana = hoje.getDay(); // 0=Dom .. 6=Sáb
   const passouDaSexta = diaSemana === 0 || diaSemana === 6; // sábado ou domingo
-  const segundaAlvo = segundaDaSemanaDe(hoje);
-  segundaAlvo.setDate(segundaAlvo.getDate() + (passouDaSexta ? 14 : 7));
-  const sextaAlvo = new Date(segundaAlvo);
-  sextaAlvo.setDate(segundaAlvo.getDate() + 11); // +11 = sexta da semana seguinte (duas semanas)
-  return { min: toISO(segundaAlvo), max: toISO(sextaAlvo) };
+  const primeiraSegunda = segundaDaSemanaDe(hoje);
+  primeiraSegunda.setDate(primeiraSegunda.getDate() + (passouDaSexta ? 14 : 7));
+
+  // mês aberto: o seguinte, depois do gatilho; senão, o corrente. Se a
+  // primeira segunda agendável já cai depois do fim desse mês (ex.: sábado
+  // no fim de fevereiro), o mês aberto passa a ser o seguinte.
+  let mesAberto = hoje >= gatilhoProxMes ? hoje.getMonth() + 1 : hoje.getMonth();
+  let ultimoDiaAberto = new Date(hoje.getFullYear(), mesAberto + 1, 0);
+  if (toISO(primeiraSegunda) > toISO(ultimoDiaAberto)) {
+    mesAberto += 1;
+    ultimoDiaAberto = new Date(hoje.getFullYear(), mesAberto + 1, 0);
+  }
+
+  return { min: toISO(primeiraSegunda), max: toISO(ultimoDiaAberto) };
 }
 
 export default function Agendar({ usuario }) {
