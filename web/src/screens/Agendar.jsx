@@ -29,9 +29,9 @@ const KIT_IDS = Object.keys(KITS);
 //   já fechou. Por isso o piso é a próxima segunda-feira (ou a seguinte, se
 //   hoje for sábado/domingo).
 // - Fim: vale sempre o MAIOR entre dois limites —
-//     1) o último dia do mês aberto: o mês corrente, e, a partir de 8 dias
-//        antes do dia 1º do mês seguinte, o mês seguinte inteiro (que segue
-//        aberto até o fim dele);
+//     1) o último dia do mês aberto: o mês corrente, e, quando faltam 8 dias
+//        para o mês acabar (ex.: 23/10, com os dias 24 a 31 pela frente), o
+//        mês seguinte inteiro (que segue aberto até o fim dele);
 //     2) duas semanas à frente: a sexta-feira da semana seguinte à primeira
 //        semana agendável (piso + 11 dias), pra janela nunca encolher abaixo
 //        de duas semanas, mesmo perto da virada do mês.
@@ -40,7 +40,8 @@ function calcularLimites() {
 
   const primeiroDiaProxMes = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 1);
   const gatilhoProxMes = new Date(primeiroDiaProxMes);
-  gatilhoProxMes.setDate(gatilhoProxMes.getDate() - 8);
+  // faltam 8 dias para o mês acabar = 9 dias antes do dia 1º do mês seguinte
+  gatilhoProxMes.setDate(gatilhoProxMes.getDate() - 9);
 
   const diaSemana = hoje.getDay(); // 0=Dom .. 6=Sáb
   const passouDaSexta = diaSemana === 0 || diaSemana === 6; // sábado ou domingo
