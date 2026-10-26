@@ -114,6 +114,7 @@ Portar exatamente o comportamento já validado no protótipo HTML (peça para ve
 - Autenticação de verdade via **Google Sign-In** restrito ao domínio `@edu.joinville.sc.gov.br` (ver seção de Segurança, atualizada abaixo) — não é mais um código fixo de acesso geral. Um segundo código, validado no servidor via Cloud Function `autenticarGestor`, libera as ações administrativas.
 - **Agendar para professor(a):** sem restrição de janela de data, atribuindo a qualquer professor cadastrado.
 - **Gerenciar reservas:** ver/cancelar qualquer reserva de qualquer data.
+- **Imprimir planilha:** botão que imprime a agenda da semana escolhida (padrão: a corrente) em A4 paisagem, uma página por kit (Vermelho, Azul, Amarelo), com a faixa do nome e a linha dos dias na cor do kit, células livres em branco e uma linha grossa entre manhã e tarde. A folha fica fora da tela com as medidas do papel (`#folha-impressao`), e o JS reduz a fonte de cada kit até caber numa página (`ajustarAoPapel`).
 - **Bloquear período:** bloquear todos os 3 kits num conjunto de períodos de uma data, com motivo obrigatório.
 - **Professores:** cadastrar e também **excluir** registros de professores.
 - **Gestores:** cadastro de múltiplos gestores (nome + e-mail).

@@ -21,6 +21,7 @@ import { auth } from '../lib/firebase';
 import { autenticarGestor } from '../lib/auth';
 import { fmtDataBR, diaSemanaCompleto } from '../lib/format';
 import ConfirmInline from '../components/ConfirmInline';
+import ImprimirPlanilha from '../components/ImprimirPlanilha';
 
 export default function Gestor() {
   const [autenticado, setAutenticado] = useState(null); // null = verificando
@@ -95,6 +96,7 @@ export default function Gestor() {
       <AgendarParaProfessor />
       <GerenciarReservas />
       <BloquearPeriodo />
+      <ImprimirPlanilha />
       <ProfessoresGestor />
       <Gestores />
     </section>
